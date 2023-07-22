@@ -1,8 +1,15 @@
 #include "macros.h"
 
+namespace ClassDB {
+	template<class T>
+		void register_class() {};
+
+	template<class ...Args>
+		void bind_method(Args ...args) {};
+}
 class def {};
 class MyClass : def {
-	EXPORT_CLASS(MyClass, def);
+	EXPORT_CLASS(MyClass);
 	
 	EXPORT_METHOD(my_method(123))
 	int my_method() {
@@ -16,13 +23,14 @@ class MyClass : def {
 
 
 class Myclass123 {
-	EXPORT_CLASS(MyClass123, Button);
+	EXPORT_CLASS(Myclass123);
 
 	EXPORT_METHOD()
 	int my1() {
 		return 123;
 	}
-};
 
-EXPORT_METHOD(My_class, Default(123))
-Ref<int> gg-h() { }
+EXPORT_METHOD(gg_h, Default(123))
+void gg_h() { };
+
+};

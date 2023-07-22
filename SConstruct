@@ -27,37 +27,9 @@ def get_arguments(text):
 	return arguments
 
 def make_bindings_macro(sources):
-	register_class_template = """
-#include "register_types.h"
-#include <gdextension_interface.h>
-#include <godot_cpp/core/class_db.hpp>
-#include <godot_cpp/core/defs.hpp>
-#include <godot_cpp/godot.hpp>
-SCONS_GENERATED_CLASS_METHODS_DEFINITIONS
-using namespace godot;
-void initialize_example_module(ModuleInitializationLevel p_level) {
-	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
-		return;
-	}
-	%s
-}
-void uninitialize_example_module(ModuleInitializationLevel p_level) {
-	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
-		return;
-	}
-}
-extern "C" GDExtensionBool GDE_EXPORT example_library_init(GDExtensionInterfaceGetProcAddress p_get_proc_address, GDExtensionClassLibraryPtr p_library, GDExtensionInitialization *r_initialization) {
-	godot::GDExtensionBinding::InitObject init_obj(p_get_proc_address, p_library, r_initialization);
-
-	init_obj.register_initializer(initialize_example_module);
-	init_obj.register_terminator(uninitialize_example_module);
-	init_obj.set_minimum_library_initialization_level(MODULE_INITIALIZATION_LEVEL_SCENE);
-
-	return init_obj.init();
-}
-"""
-	r = re.compile('EXPORT_CLASS\((.*)\);?|EXPORT_METHOD\((.*)\)[\s\n]+([\w<> ]+)\s+([\w_]+)\(.*\)')
+	r = re.compile('class\s+([\w_]+)(?:\s*:\s*(?:public\s+|private\s+|protected\s+)?([\w_]+))?[\s\n]*{[\s\n]*EXPORT_CLASS\(\s*[\w_]+\s*\);?|EXPORT_METHOD\((.*)\)[\s\n]+([\w<> ]+)\s+([\w_]+)\(.*\)')
 	bind_methods = {}
+	generated_binds = []
 
 	for file in sources:
 		with open('main.cpp', 'r') as file:
@@ -67,35 +39,37 @@ extern "C" GDExtensionBool GDE_EXPORT example_library_init(GDExtensionInterfaceG
 		#print(r.findall(text))
 		res = r.findall(text)
 
+		print(res)
 		current_class = None
 		"""
-		EXPORT_ARGS 0("class_name, class_inherit")
-		EXPORT_METHOD 1(args) 2(func_ret) 3(func_name)
+		EXPORT_ARGS 0(class_name), 1(class_inherit)
+		EXPORT_METHOD 2(args) 3(func_ret) 4(func_name)
 		"""
 		for matches in res:
 				
 			if matches[0] != '':
 				#EXPORT_CLASS
-				class_name, class_inherit_name = get_arguments(matches[0])
+				class_name = matches[0]
+				class_inherit_name = matches[0] if matches != '' else 'Node'
 				current_class = class_name
 				bind_methods |= {class_name: []}
+				generated_binds.append((f'GDP_CLASS_NAME_INH_{class_inherit_name}', class_inherit_name)) 
 
-			elif matches[3] != '':
+			elif matches[2] != '':
 				#EXPORT_METHOD
-				args = (get_arguments(matches[1]), matches[2], matches[3])
+				args = (get_arguments(matches[2]), matches[3], matches[4])
 				bind_methods[current_class] += [args]
 
 	#Generate binding strings
 	generated_register_class_str = ''
-	generated_binds = []
 	for name, members in bind_methods.items():
-		generated_register_class_str += f'ClassDB::register_class<{name}>();\n'
+		generated_register_class_str += f'GDREGISTER_CLASS({name});'
 
 		generated_bind_methods_str = ''
 		for args, func_ret, func_name in members:
 			generated_bind_methods_str += f'ClassDB::bind_method(D_METHOD("{func_name}"), &{name}::{func_name});'
 		
-		generated_binds.append((f'REGISTER_CLASS_GEN_CODE_CLASS_{name}', f'{generated_bind_methods_str}'))
+		generated_binds.append((f'REGISTER_CLASS_GEN_CODE_CLASS_{name}', generated_bind_methods_str))
 
 	print('Binded methods:')
 	print(bind_methods)
@@ -104,18 +78,25 @@ extern "C" GDExtensionBool GDE_EXPORT example_library_init(GDExtensionInterfaceG
 	print()
 	print(generated_binds)
 	
+	generated_binds.append(('REGISTER_CLASSES_GEN_CODE', f'"{generated_register_class_str}"'))
+
+
 	return generated_binds
 
 #env.Append(CPPPATH=["src/"])
-sources = Glob("*.cpp")
+sources = Glob("*.cpp", exclude=['register_types.cpp'])
 print([str(i) for i in sources])
 env = Environment()
 
+env.Append(CXXFLAGS=['-fdiagnostics-color=always'])
 env.Append(CPPDEFINES=make_bindings_macro([str(i) for i in sources]))
-library = env.Program(
-        "main",
-        source=sources)
-print("build")
+
+
+VariantDir('build', '.')
+
+library = env.StaticLibrary(
+        "#bin/main",
+	['#build/' + str(i) for i in sources],
+	)
 
 Default(library)
-
