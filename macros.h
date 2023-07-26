@@ -1,13 +1,8 @@
-#define GDCLASS(m_class, m_inherits)
-
-#define D_METHOD(method) 123
 #define REGISTER_CLASS_GEN_CODE(CLASS_NAME) REGISTER_CLASS_GEN_CODE_CLASS_ ## CLASS_NAME
-
+#define STR(s) # s
 #define EXPORT_METHOD(METHOD_NAME, ...)
 
-#define EXPORT_CLASS(CLASS_NAME) \
-	GDCLASS(CLASS_NAME , GPD_CLASS_NAME_INH_ ## CLASS_NAME)			\
-static void _register_methods() {			\
-	REGISTER_CLASS_GEN_CODE(CLASS_NAME)			\
-}			
-
+#define EXPORT_CLASS(CLASS_NAME, CLASS_NAME_INH) \
+	GDCLASS(CLASS_NAME , CLASS_NAME_INH)			\
+public:								\
+static void _bind_methods();

@@ -27,9 +27,9 @@ def get_arguments(text):
 	return arguments
 
 def make_bindings_macro(sources):
-	r = re.compile('class\s+([\w_]+)(?:\s*:\s*(?:public\s+|private\s+|protected\s+)?([\w_]+))?[\s\n]*{[\s\n]*EXPORT_CLASS\(\s*[\w_]+\s*\);?|EXPORT_METHOD\((.*)\)[\s\n]+([\w<> ]+)\s+([\w_]+)\(.*\)')
+	r = re.compile('class\s+([\w_]+)(?:\s*:\s*(?:public\s+|private\s+|protected\s+)?([\w_]+))?[\s\n]*{[\s\n]*EXPORT_CLASS\(.*\);?|EXPORT_METHOD\((.*)\)[\s\n]+([\w<> ]+)\s+([\w_]+)\((.*)\)')
 	bind_methods = {}
-	generated_binds = []
+	binds = {}
 
 	for file in sources:
 		with open('main.cpp', 'r') as file:
@@ -39,11 +39,10 @@ def make_bindings_macro(sources):
 		#print(r.findall(text))
 		res = r.findall(text)
 
-		print(res)
 		current_class = None
 		"""
 		EXPORT_ARGS 0(class_name), 1(class_inherit)
-		EXPORT_METHOD 2(args) 3(func_ret) 4(func_name)
+		EXPORT_METHOD 2(args) 3(func_ret) 4(func_name) 5(func_args)
 		"""
 		for matches in res:
 				
@@ -53,50 +52,57 @@ def make_bindings_macro(sources):
 				class_inherit_name = matches[0] if matches != '' else 'Node'
 				current_class = class_name
 				bind_methods |= {class_name: []}
-				generated_binds.append((f'GDP_CLASS_NAME_INH_{class_inherit_name}', class_inherit_name)) 
 
 			elif matches[2] != '':
 				#EXPORT_METHOD
-				args = (get_arguments(matches[2]), matches[3], matches[4])
+				args = (get_arguments(matches[2]), matches[3], matches[4], matches[5])
 				bind_methods[current_class] += [args]
 
 	#Generate binding strings
-	generated_register_class_str = ''
+	register_class_defs = ''
+	register_class_str = ''
+
 	for name, members in bind_methods.items():
-		generated_register_class_str += f'GDREGISTER_CLASS({name});'
+		register_class_str += f'GDREGISTER_CLASS({name});'
 
-		generated_bind_methods_str = ''
-		for args, func_ret, func_name in members:
-			generated_bind_methods_str += f'ClassDB::bind_method(D_METHOD("{func_name}"), &{name}::{func_name});'
+		bind_methods_str = ''
+		for args, func_ret, func_name, func_args in members:
+			bind_methods_str += f'ClassDB::bind_method(D_METHOD(STR({func_name})), &{name}::{func_name});'
+
+			#register_class_defs += f'{func_ret} {name}::{func_name}({func_args});'
 		
-		generated_binds.append((f'REGISTER_CLASS_GEN_CODE_CLASS_{name}', generated_bind_methods_str))
+		register_class_defs += f'void {name}::_bind_methods(){{{bind_methods_str}}};'
+		#binds.append((f'REGISTER_CLASS_GEN_CODE_CLASS_{name}', bind_methods_str))
+		print(f"For class {name}: '{bind_methods_str}'")
 
-	print('Binded methods:')
-	print(bind_methods)
-	print('Strings:')
-	print(generated_register_class_str)
-	print()
-	print(generated_binds)
 	
-	generated_binds.append(('REGISTER_CLASSES_GEN_CODE', f'"{generated_register_class_str}"'))
+
+	
+	binds['REGISTER_CLASSES_GEN_CODE'] = f'"{register_class_str}"'
+	#register_class_defs = register_class_defs.replace('"', '\\"')
+	binds['GPD_GEN_CLASS_DEFS'] = f'{register_class_defs}'
+	print('GPD DEFS')
+	print(register_class_defs)
+	print()
 
 
-	return generated_binds
+	return binds
 
-#env.Append(CPPPATH=["src/"])
+envcpp = SConscript('godot-cpp/SConstruct')
+
+env = envcpp.Clone()
+
 sources = Glob("*.cpp", exclude=['register_types.cpp'])
 print([str(i) for i in sources])
-env = Environment()
 
 env.Append(CXXFLAGS=['-fdiagnostics-color=always'])
 env.Append(CPPDEFINES=make_bindings_macro([str(i) for i in sources]))
 
-
-VariantDir('build', '.')
-
+env.Substfile('register_types.cpp', {'@include_scripts@' : '\n'.join([f'#include "{str(i)}"' for i in sources])})
+#print('\n'.join([f'#include "{str(i)}"' for i in sources]))
 library = env.StaticLibrary(
         "#bin/main",
-	['#build/' + str(i) for i in sources],
+	source = sources + Glob('register_types.cpp'),
 	)
 
 Default(library)
