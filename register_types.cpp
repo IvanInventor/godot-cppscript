@@ -6,7 +6,7 @@
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
 
-@include_scripts@
+#include "scripts.gen.h"
 
 using namespace godot;
 GPD_GEN_CLASS_DEFS

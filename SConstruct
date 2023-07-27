@@ -88,21 +88,31 @@ def make_bindings_macro(sources):
 
 	return binds
 
-envcpp = SConscript('godot-cpp/SConstruct')
+def build_scripts(target, source, env):
 
-env = envcpp.Clone()
+	print('Building scripts')
+	script_sources = [str(i) for i in source if str(i) != 'register_types.cpp']
 
-sources = Glob("*.cpp", exclude=['register_types.cpp'])
-print([str(i) for i in sources])
+	env.Append(CPPDEFINES=make_bindings_macro([str(i) for i in script_sources]))
+	
+	with open('scripts.gen.h', 'w') as file:
+		file.write('\n'.join([f'#include "{str(i)}"' for i in script_sources]))
 
-env.Append(CXXFLAGS=['-fdiagnostics-color=always'])
-env.Append(CPPDEFINES=make_bindings_macro([str(i) for i in sources]))
-
-env.Substfile('register_types.cpp', {'@include_scripts@' : '\n'.join([f'#include "{str(i)}"' for i in sources])})
-#print('\n'.join([f'#include "{str(i)}"' for i in sources]))
-library = env.StaticLibrary(
-        "#bin/main",
-	source = sources + Glob('register_types.cpp'),
+	library = env.SharedLibrary(
+	'bin/scripts.o',
+	source=source,
 	)
 
+
+envcpp = SConscript('godot-cpp/SConstruct')
+env = envcpp.Clone()
+sources = Glob("*.cpp", exclude=['register_types.cpp', 'scripts.gen.h'])
+
+action = Action(build_scripts)
+builder = Builder(action=action, sources=sources)
+env.Append(BUILDERS={'Build_scripts' : builder})
+
+library = env.Build_scripts(
+		'#bin/libmain.so',
+		source=sources)
 Default(library)
