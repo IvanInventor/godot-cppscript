@@ -6,18 +6,17 @@
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
 
-#include "scripts.gen.h"
 
 using namespace godot;
-GPD_GEN_CLASS_DEFS
+#include "scripts.gen.h"
+
 
 void initialize_example_module(ModuleInitializationLevel p_level) {
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
-	// Macro
 	// Write your custom code before or after this macro
-	REGISTER_CLASSES_GEN_CODE
+	register_script_classes();
 
 }
 

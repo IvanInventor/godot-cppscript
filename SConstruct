@@ -1,6 +1,5 @@
 import re
 
-
 def get_arguments(text):
 	arguments = []
 	stack = 0
@@ -27,12 +26,13 @@ def get_arguments(text):
 	return arguments
 
 def make_bindings_macro(sources):
+	print("--- GENERATE BINDINGS ---")
 	r = re.compile('class\s+([\w_]+)(?:\s*:\s*(?:public\s+|private\s+|protected\s+)?([\w_]+))?[\s\n]*{[\s\n]*EXPORT_CLASS\(.*\);?|EXPORT_METHOD\((.*)\)[\s\n]+([\w<> ]+)\s+([\w_]+)\((.*)\)')
 	bind_methods = {}
 	binds = {}
 
-	for file in sources:
-		with open('main.cpp', 'r') as file:
+	for src in sources:
+		with open(str(src), 'r') as file:
 			text = file.read()
 
 		#r = re.compile('(EXPORT_METHOD|EXPORT_CLASS)\((.*)\)')
@@ -49,7 +49,7 @@ def make_bindings_macro(sources):
 			if matches[0] != '':
 				#EXPORT_CLASS
 				class_name = matches[0]
-				class_inherit_name = matches[0] if matches != '' else 'Node'
+				#class_inherit_name = matches[0] if matches != '' else 'Node'
 				current_class = class_name
 				bind_methods |= {class_name: []}
 
@@ -59,60 +59,70 @@ def make_bindings_macro(sources):
 				bind_methods[current_class] += [args]
 
 	#Generate binding strings
-	register_class_defs = ''
+	include_str = ''
 	register_class_str = ''
+	bind_members_str = ''
 
 	for name, members in bind_methods.items():
-		register_class_str += f'GDREGISTER_CLASS({name});'
+		include_str += f'#include "{name}"\n'
+		register_class_str += f'\tGDREGISTER_CLASS({name});\n'
 
 		bind_methods_str = ''
 		for args, func_ret, func_name, func_args in members:
-			bind_methods_str += f'ClassDB::bind_method(D_METHOD(STR({func_name})), &{name}::{func_name});'
+			bind_methods_str += f'\tClassDB::bind_method(D_METHOD(STR({func_name})), &{name}::{func_name});\n'
 
-			#register_class_defs += f'{func_ret} {name}::{func_name}({func_args});'
+			#bind_members_str += f'{func_ret} {name}::{func_name}({func_args});'
 		
-		register_class_defs += f'void {name}::_bind_methods(){{{bind_methods_str}}};'
+		bind_members_str += f'void {name}::_bind_methods() {{\n{bind_methods_str}\n}};\n'
 		#binds.append((f'REGISTER_CLASS_GEN_CODE_CLASS_{name}', bind_methods_str))
-		print(f"For class {name}: '{bind_methods_str}'")
+		#print(f"For class {name}: '{bind_methods_str}'")
 
+	register_class_str = f'void register_script_classes() {{\n{register_class_str}\n}}\n'
+
+	gen_text = include_str + register_class_str + bind_members_str
 	
-
-	
-	binds['REGISTER_CLASSES_GEN_CODE'] = f'"{register_class_str}"'
-	#register_class_defs = register_class_defs.replace('"', '\\"')
-	binds['GPD_GEN_CLASS_DEFS'] = f'{register_class_defs}'
-	print('GPD DEFS')
-	print(register_class_defs)
-	print()
-
-
-	return binds
+	print("---GENERATED TEXT---")
+	print(gen_text)
+	print("--------------------")
+	return gen_text
 
 def build_scripts(target, source, env):
 
 	print('Building scripts')
+	print([str(i) for i in target])
+	print([str(i) for i in source])
+	return
 	script_sources = [str(i) for i in source if str(i) != 'register_types.cpp']
-
-	env.Append(CPPDEFINES=make_bindings_macro([str(i) for i in script_sources]))
+	
+	gen_text = make_bindings_macro(script_sources)
+	#env.Append(CPPDEFINES=make_bindings_macro([str(i) for i in script_sources]))
 	
 	with open('scripts.gen.h', 'w') as file:
-		file.write('\n'.join([f'#include "{str(i)}"' for i in script_sources]))
+		file.write(gen_text)
 
-	library = env.SharedLibrary(
-	'bin/scripts.o',
-	source=source,
-	)
-
+def emitter(target, source, env):
+	print("CUSTOM EMITTER")
+	print(target, source)
+	for src in source:
+			env.AddPreAction(src, build_scripts)
+	return target, source
 
 envcpp = SConscript('godot-cpp/SConstruct')
+envcpp.Dump()
 env = envcpp.Clone()
-sources = Glob("*.cpp", exclude=['register_types.cpp', 'scripts.gen.h'])
+sources = Glob("*.cpp")
+env['SOURCES'] = sources
+#action = Action(build_scripts)
+#builder = Builder(action=action, sources=sources)
+#env.Append(BUILDERS={'Build_scripts' : builder})
 
-action = Action(build_scripts)
-builder = Builder(action=action, sources=sources)
-env.Append(BUILDERS={'Build_scripts' : builder})
 
-library = env.Build_scripts(
-		'#bin/libmain.so',
-		source=sources)
+#env.Replace(SHLIBEMITTER=emitter)
+env.Append(SHLIBEMITTER=emitter)
+
+library = env.SharedLibrary(
+	'#bin/libscripts.so',
+	source=sources,
+	)
+env.Ignore(library, 'scripts.gen.h')
 Default(library)
