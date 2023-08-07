@@ -4,7 +4,7 @@
 
 using namespace godot;
 class MyClass : public Sprite2D {
-	EXPORT_CLASS(MyClass, Sprite2D);
+	GCLASS(MyClass, Sprite2D);
 	
 public: 
 	EXPORT_METHOD(my_method(123))

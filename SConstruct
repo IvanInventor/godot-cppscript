@@ -1,128 +1,157 @@
 import re
+import clang.cindex
+import json
 
-def get_arguments(text):
-	arguments = []
-	stack = 0
-	head = 0
+SCRIPT_REGEX = re.compile('class\s+([\w_]+)(?:\s*:\s*(?:public\s+|private\s+|protected\s+)?([\w_]+))?[\s\n]*{[\s\n]*EXPORT_CLASS\(.*\);?|EXPORT_METHOD\((.*)\)[\s\n]+([\w<> ]+)\s+([\w_]+)\((.*)\)')
 
-	for idx in range(len(text)):
-		char = text[idx]
+########## CLANG
+def extract_methods_and_fields(translation_unit):
 
-		if char == '(':
-			stack += 1
-		elif char == ')':
-			if stack > 0:
-				stack -= 1
-			else:
-				raise ValueError("Unbalanced brackets in arguments.")
+	godot_class = { 'name' : None,
+			'properties' : [],
+			'methods' : []
+		}
+	current_property = None
 
-		if char == ',' and stack == 0:
-			arguments.append(text[head:idx].strip())
-			head = idx + 1
+	def parse_cursor(cursor, depth = 0):
+		#print('' * depth, f'{cursor.kind}')
+		#print([i.spelling for i in cursor.get_tokens()])
+		match cursor.kind:
+			case clang.cindex.CursorKind.CLASS_DECL:
+				#if godot_class['name'] != None:
+				#	print("Multiple class definitions not allowed")
+				#	exit(1)
 
-	if text[head:].strip():
-		arguments.append(text[head:].strip())
+				godot_class['name'] = cursor.spelling
+				tokens = cursor.get_tokens()
+				for token in tokens:
+					if token.spelling == ':': # base class declaration after
+						m = [next(tokens).spelling, next(tokens).spelling]
+						match m:
+							case ['public' | 'private' | 'protected' as type, base]:
+								godot_class['base'] = base
+							case [base]:
+								godot_class['base'] = base
 
-	return arguments
+						break
 
-def make_bindings_macro(sources):
-	print("--- GENERATE BINDINGS ---")
-	r = re.compile('class\s+([\w_]+)(?:\s*:\s*(?:public\s+|private\s+|protected\s+)?([\w_]+))?[\s\n]*{[\s\n]*EXPORT_CLASS\(.*\);?|EXPORT_METHOD\((.*)\)[\s\n]+([\w<> ]+)\s+([\w_]+)\((.*)\)')
-	bind_methods = {}
-	binds = {}
 
-	for src in sources:
-		with open(str(src), 'r') as file:
-			text = file.read()
+			case clang.cindex.CursorKind.CXX_BASE_SPECIFIER:
+                		godot_class['base'] = cursor.type.spelling
 
-		#r = re.compile('(EXPORT_METHOD|EXPORT_CLASS)\((.*)\)')
-		#print(r.findall(text))
-		res = r.findall(text)
+			case clang.cindex.CursorKind.CXX_METHOD:
+				godot_class['methods'].append({	   'name' : cursor.spelling,
+				      				   'return' : cursor.result_type.spelling,
+				      				   'args' : [{  'name' : arg.type.spelling,
+			    							'type' : arg.spelling} for arg in cursor.get_arguments()]})
+			case clang.cindex.CursorKind.FIELD_DECL:
+				if cursor.spelling != 'GCLASS':
+					current_property = cursor.spelling
+					godot_class['properties'].append({ 'name' : cursor.spelling,
+									   'type' : cursor.type.spelling})
 
-		current_class = None
-		"""
-		EXPORT_ARGS 0(class_name), 1(class_inherit)
-		EXPORT_METHOD 2(args) 3(func_ret) 4(func_name) 5(func_args)
-		"""
-		for matches in res:
-				
-			if matches[0] != '':
-				#EXPORT_CLASS
-				class_name = matches[0]
-				#class_inherit_name = matches[0] if matches != '' else 'Node'
-				current_class = class_name
-				bind_methods |= {class_name: []}
+		for child in cursor.get_children():
+			parse_cursor(child, depth + 1)
 
-			elif matches[2] != '':
-				#EXPORT_METHOD
-				args = (get_arguments(matches[2]), matches[3], matches[4], matches[5])
-				bind_methods[current_class] += [args]
 
-	#Generate binding strings
-	include_str = ''
-	register_class_str = ''
-	bind_members_str = ''
+	parse_cursor(translation_unit.cursor)
+	# Recursively traverse the child nodes
+	
+	return godot_class
 
-	for name, members in bind_methods.items():
-		include_str += f'#include "{name}"\n'
-		register_class_str += f'\tGDREGISTER_CLASS({name});\n'
+def parse_cpp_file(filename):
+	index = clang.cindex.Index.create()
+	translation_unit = index.parse(filename, args=['-DGDCLASS'])
 
-		bind_methods_str = ''
-		for args, func_ret, func_name, func_args in members:
-			bind_methods_str += f'\tClassDB::bind_method(D_METHOD(STR({func_name})), &{name}::{func_name});\n'
+	if not translation_unit:
+		print("Error: Failed to parse the translation unit!")
+		return
 
-			#bind_members_str += f'{func_ret} {name}::{func_name}({func_args});'
+	return extract_methods_and_fields(translation_unit)
+
+def generate_register_header(target, source, env):
+	defs = env['DEFS']
+	print('-------------- GENERATING HEADER ---------------')
+	header = ''
+	for file, class_defs in defs.items():
+		print(file, class_defs)
+		# class ClassName : Base {
+		header += f"class {class_defs['name']} : {class_defs['base']} {{\n"
 		
-		bind_members_str += f'void {name}::_bind_methods() {{\n{bind_methods_str}\n}};\n'
-		#binds.append((f'REGISTER_CLASS_GEN_CODE_CLASS_{name}', bind_methods_str))
-		#print(f"For class {name}: '{bind_methods_str}'")
+		# GDCLASS(ClassName, Base);
+		#header += f"GDCLASS({class_defs['name']}, {class_defs['base']});\n"
 
-	register_class_str = f'void register_script_classes() {{\n{register_class_str}\n}}\n'
+		# _bind_methods
+		header += f"static void _bind_methods();\n"
+		# Properties
+		header += '\n'.join([f"{p['type']} {p['name']};" for p in class_defs['properties']]) + '\n'
+		# Methods
+		header += '\n'.join([f"{p['return']} {p['name']}({', '.join([arg['name'] for arg in p['args']])});" for p in class_defs['methods']]) + '\n'
 
-	gen_text = include_str + register_class_str + bind_members_str
-	
-	print("---GENERATED TEXT---")
-	print(gen_text)
-	print("--------------------")
-	return gen_text
+		header += '};\n'
 
-def build_scripts(target, source, env):
-
-	print('Building scripts')
-	print([str(i) for i in target])
-	print([str(i) for i in source])
-	return
-	script_sources = [str(i) for i in source if str(i) != 'register_types.cpp']
-	
-	gen_text = make_bindings_macro(script_sources)
-	#env.Append(CPPDEFINES=make_bindings_macro([str(i) for i in script_sources]))
+		header += f"void {class_defs['name']}::_bind_methods() {{\n"
+		header += '}\n'
 	
 	with open('scripts.gen.h', 'w') as file:
-		file.write(gen_text)
+		file.write(header)
+
+########### CLANG
+SPP_DEFS_FILE = '.spp_defs'
+def load_defs():
+	try:
+		with open(SPP_DEFS_FILE, 'r') as file:
+			return json.load(file)
+	except:
+		return {}
+
+def save_defs(defs):
+	with open(SPP_DEFS_FILE, 'w') as file:
+		json.dump(defs, file)
+
+def build_scripts(target, source, env):
+	env['REGENERAGE'] = True
+	print('Building scripts')
+	defs[str(source[0])] = parse_cpp_file(str(source[0]))
+	print("Parsed definitions: ", defs[str(source[0])])
+	
+
 
 def emitter(target, source, env):
-	print("CUSTOM EMITTER")
-	print(target, source)
-	for src in source:
-			env.AddPreAction(src, build_scripts)
+	sources = [str(i) for i in source if str(i) != 'register_types.os']
+	env.AddPreAction('register_types.os', generate_register_header)
+	for src in sources:
+		env.AddPreAction(str(src), build_scripts)
 	return target, source
 
 envcpp = SConscript('godot-cpp/SConstruct')
-envcpp.Dump()
 env = envcpp.Clone()
-sources = Glob("*.cpp")
-env['SOURCES'] = sources
+sources = Glob("*.cpp", exclude=['register_types.cpp'])
+env['REGENERATE'] = False
+env['SCRIPT_SOURCES'] = sources
+env['GEN_HEADER'] = ['', '', '']
+#TEST
+defs = load_defs()
+env['DEFS'] = defs
+#print("------------------ TEST ---------------------")
+#for name in sources:
+#	cpp = str(name)
+#	#print(f'For file {cpp}:')
+#	#cpp_defs = extract_methods_and_fields(cpp, path=env['CPPPATH'])
+#	cpp_defs = extract_methods_and_fields(cpp)
+#	#print(json.dumps(defs, indent=2))
+#	defs[cpp] = cpp_defs
+
 #action = Action(build_scripts)
 #builder = Builder(action=action, sources=sources)
 #env.Append(BUILDERS={'Build_scripts' : builder})
-
 
 #env.Replace(SHLIBEMITTER=emitter)
 env.Append(SHLIBEMITTER=emitter)
 
 library = env.SharedLibrary(
 	'#bin/libscripts.so',
-	source=sources,
+	source=sources + Glob('register_types.cpp'),
 	)
 env.Ignore(library, 'scripts.gen.h')
 Default(library)

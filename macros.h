@@ -2,7 +2,8 @@
 #define STR(s) # s
 #define EXPORT_METHOD(METHOD_NAME, ...)
 
-#define EXPORT_CLASS(CLASS_NAME, CLASS_NAME_INH) \
+#define GCLASS(CLASS_NAME, CLASS_NAME_INH) 						\
 	GDCLASS(CLASS_NAME , CLASS_NAME_INH)			\
 public:								\
 static void _bind_methods();
+

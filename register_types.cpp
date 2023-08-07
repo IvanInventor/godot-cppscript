@@ -1,4 +1,3 @@
-#include "register_types.h"
 
 #include <gdextension_interface.h>
 
@@ -6,6 +5,9 @@
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
 
+//temp
+#include <godot_cpp/classes/sprite2d.hpp>
+#include "register_types.h"
 
 using namespace godot;
 #include "scripts.gen.h"
