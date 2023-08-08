@@ -93,8 +93,14 @@ def generate_register_header(target, source, env):
 		header += f"void {class_defs['name']}::_bind_methods() {{\n"
 		header += '}\n'
 	
+	header += 'void register_script_classes() {\n'
+	# place registers here
+	header += '}\n'
+
 	with open('scripts.gen.h', 'w') as file:
 		file.write(header)
+	
+	save_defs(defs)
 
 ########### CLANG
 SPP_DEFS_FILE = '.spp_defs'
@@ -110,22 +116,26 @@ def save_defs(defs):
 		json.dump(defs, file)
 
 def build_scripts(target, source, env):
-	env['REGENERAGE'] = True
-	print('Building scripts')
+	if env['REGENERATE'] == False:
+		env['REGENERAGE'] = True
+		env['defs'] = load_defs()
+	
 	defs[str(source[0])] = parse_cpp_file(str(source[0]))
 	print("Parsed definitions: ", defs[str(source[0])])
 	
 
 
 def emitter(target, source, env):
+	print('------------------ EMITTER ------------------------')
 	sources = [str(i) for i in source if str(i) != 'register_types.os']
-	env.AddPreAction('register_types.os', generate_register_header)
 	for src in sources:
 		env.AddPreAction(str(src), build_scripts)
 	return target, source
 
 envcpp = SConscript('godot-cpp/SConstruct')
 env = envcpp.Clone()
+#env = Environment()
+#env['suffix'] = '.o'
 sources = Glob("*.cpp", exclude=['register_types.cpp'])
 env['REGENERATE'] = False
 env['SCRIPT_SOURCES'] = sources
@@ -133,25 +143,23 @@ env['GEN_HEADER'] = ['', '', '']
 #TEST
 defs = load_defs()
 env['DEFS'] = defs
-#print("------------------ TEST ---------------------")
-#for name in sources:
-#	cpp = str(name)
-#	#print(f'For file {cpp}:')
-#	#cpp_defs = extract_methods_and_fields(cpp, path=env['CPPPATH'])
-#	cpp_defs = extract_methods_and_fields(cpp)
-#	#print(json.dumps(defs, indent=2))
-#	defs[cpp] = cpp_defs
 
-#action = Action(build_scripts)
-#builder = Builder(action=action, sources=sources)
-#env.Append(BUILDERS={'Build_scripts' : builder})
+env.Append(LIBEMITTER=emitter)
 
-#env.Replace(SHLIBEMITTER=emitter)
-env.Append(SHLIBEMITTER=emitter)
-
-library = env.SharedLibrary(
-	'#bin/libscripts.so',
-	source=sources + Glob('register_types.cpp'),
+static_library = env.StaticLibrary(
+	'#bin/libscripts' + env['OBJSUFFIX'],
+	source=sources
 	)
+
+env.AddPostAction(static_library[0], generate_register_header)
+print(static_library)
+
+env.Append(LIBPATH=['bin/'])
+env.Append(LIBs=[static_library[0]])
+library = env.SharedLibrary(
+		'#bin/libscripts{}{}'.format(env['suffix'], env['LIBSUFFIX']),
+		source=['register_types.cpp']
+		)
+env.Depends(library, static_library)
 env.Ignore(library, 'scripts.gen.h')
 Default(library)
