@@ -2,6 +2,8 @@ import re
 import clang.cindex
 import json
 
+REGENERATE = False
+scripts = []
 # TODO
 #	Register class
 #	Register abstract class
@@ -29,14 +31,11 @@ def extract_methods_and_fields(translation_unit):
 	godot_class = {}
 	current_class = None
 	current_access = 'private'
-
+	macros = []
 	def parse_class(parent, class_name):
 		for cursor in parent.get_children():
 
-			print(cursor.kind)
-			print(int(cursor.extent.start.offset))
 			#print(vars(cursor.extent.start).items())
-			print([i.spelling for i in cursor.get_tokens()])
 			match cursor.kind:
 				case clang.cindex.CursorKind.CXX_ACCESS_SPEC_DECL:
 					current_access = cursor.spelling
@@ -51,7 +50,7 @@ def extract_methods_and_fields(translation_unit):
 									   'position' : cursor.extent.start.offset
 						})
 				case clang.cindex.CursorKind.FIELD_DECL:
-					godot_class['properties'].append({ 	'type' : cursor.type.spelling,
+					godot_class[class_name]['properties'].append({ 	'type' : cursor.type.spelling,
 				       						'name' : cursor.spelling,
 				       						'position' : cursor.extent.start.offset})
 
@@ -67,11 +66,11 @@ def extract_methods_and_fields(translation_unit):
 						m = [next(tokens).spelling, next(tokens).spelling]
 						match m:
 							case ['public' | 'private' | 'protected', base] | [base]:
-							current_class = cursor.spelling
-							godot_class[current_class] = {	'properties' : [],
-											'methods' : [],
-				     							'base' : base
-								}
+								current_class = cursor.spelling
+								godot_class[current_class] = {	'properties' : [],
+												'methods' : [],
+												'base' : base
+									}
 								parse_class(cursor, current_class)
 							case _:
 								return
@@ -79,11 +78,10 @@ def extract_methods_and_fields(translation_unit):
 			case clang.cindex.CursorKind.MACRO_INSTANTIATION:
 				match cursor.spelling:
 					case 'GCLASS':
-						print('----- PARSING GDCLASS ---------')
+						pass
 
 					case 'GPROPERTY':
-						print('----- PARSING GPROPERTY ---------')
-						macros_locations.append(cursor.extent.start.offset)
+						pass
 
 
 
@@ -94,15 +92,11 @@ def extract_methods_and_fields(translation_unit):
 	parse_cursor(translation_unit.cursor)
 	# Recursively traverse the child nodes
 	
-	print('------------ MACROS LOCATIONS -------------')
-	print(macros_locations)
-	print('------------ PROPERTIES LOCATIONS -------------')
-	print(props_locations)
 	return godot_class
 
 def parse_cpp_file(filename):
 	index = clang.cindex.Index.create()
-	translation_unit = index.parse(filename, args=['-DGDCLASS'], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+	translation_unit = index.parse(filename, args=['-DGDCLASS', '-I.'], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
 		print("Error: Failed to parse the translation unit!")
@@ -110,39 +104,40 @@ def parse_cpp_file(filename):
 
 	#return extract_methods_and_fields(translation_unit)
 	data = extract_methods_and_fields(translation_unit)
-	print(f'Parsed data from {filename}:')
-	print(json.dumps(data, indent=2, sort_keys=True))
+	return data
 
 def generate_register_header(target, source, env):
-	if env['REGENERATE'] == False:
-		return
+	#TODO: fix always false
+	#if env['REGENERATE'] == False:
+	#	return
 
-	defs = env['defs']
 	print('-------------- GENERATING HEADER ---------------')
+	defs = env['defs']
 	header = ''
-	for file, class_defs in defs.items():
-		print(file, class_defs)
-		# class ClassName : Base {
-		header += f"class {class_defs['name']} : {class_defs['base']} {{\n"
+	# Generate include headers
+	for file in scripts:
+		header += f'#include <{file}>\n'
+	# Generate register_classes function
+	register_classes_str = 'inline void register_script_classes() {\n'
+	register_classes_str += ''.join([f"ClassDB::register_class<{i}>();\n" for i in defs.keys()])
+	register_classes_str += '}\n'
+	header += register_classes_str
+	# Generate _bind_methods for each class
+	bind_methods_all_str = ''
+	for class_name, content in defs.items():
+		bind = f'void {class_name}::_bind_methods() {{\n'
 		
-		# GDCLASS(ClassName, Base);
-		#header += f"GDCLASS({class_defs['name']}, {class_defs['base']});\n"
+		for method in content['methods']:
+			#TODO: refer to "Generate _bind_methods"
+			bind += f'	ClassDB::bind_method(D_METHOD("{method["name"]}"), &{class_name}::{method["name"]});\n'
 
-		# _bind_methods
-		header += f"static void _bind_methods();\n"
-		# Properties
-		header += '\n'.join([f"{p['type']} {p['name']};" for p in class_defs['properties']]) + '\n'
-		# Methods
-		header += '\n'.join([f"{p['return']} {p['name']}({', '.join([arg['name'] for arg in p['args']])});" for p in class_defs['methods']]) + '\n'
+		for prop in content['properties']:
+			pass
+			#TODO
+			#bind += f'ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "group_subgroup_custom_position"), "set_custom_position", "get_custom_position");'
 
-		header += '};\n'
-
-		header += f"void {class_defs['name']}::_bind_methods() {{\n"
-		header += '}\n'
-	
-	header += 'void register_script_classes() {\n'
-	# place registers here
-	header += '}\n'
+		bind += '};\n\n'
+		header += bind
 
 	with open('scripts.gen.h', 'w') as file:
 		file.write(header)
@@ -159,15 +154,19 @@ def load_defs():
 		return {}
 
 def save_defs(defs):
+	print("Saving: *****", defs)
 	with open(SPP_DEFS_FILE, 'w') as file:
 		json.dump(defs, file)
 
 def build_scripts(target, source, env):
-	if env['REGENERATE'] == False:
-		env['REGENERAGE'] = True
+	global REGENERATE
+	if not REGENERATE:
+		REGENERATE = True
 		env['defs'] = load_defs()
 	
-	env['defs'][str(source[0])] = parse_cpp_file(str(source[0]))
+	header = str(source[0])[:-4] + '.hpp'
+	data = parse_cpp_file(header)
+	env['defs'] |= data
 	#print("Parsed definitions: ", defs[str(source[0])])
 	
 
@@ -180,21 +179,24 @@ def emitter(target, source, env):
 
 envcpp = SConscript('godot-cpp/SConstruct')
 env = envcpp.Clone()
+env.Append(CPPPATH='.')
 #env = Environment()
 #env['suffix'] = '.o'
-sources = Glob("*.cpp", exclude=['register_types.cpp'])
-env['REGENERATE'] = False
+sources = Glob("src/*.cpp", exclude=['register_types.cpp'])
+scripts = [str(i) for i in Glob("src/*.hpp")]
+#env['REGENERATE'] = False
+#env['register_classes'] = []
 #TEST
 
 env.Append(LIBEMITTER=emitter)
 
+library_name = 'bin/libscripts' + env['OBJSUFFIX']
 static_library = env.StaticLibrary(
-	'#bin/libscripts' + env['OBJSUFFIX'],
+	library_name,
 	source=sources
 	)
 
-env.AddPostAction(static_library[0], generate_register_header)
-print(static_library)
+env.AddPostAction(static_library, generate_register_header)
 
 env.Append(LIBPATH=['bin/'])
 env.Append(LIBs=[static_library[0]])
