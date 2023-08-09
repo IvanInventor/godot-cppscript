@@ -7,3 +7,4 @@
 public:								\
 static void _bind_methods();
 
+#define GPROPERTY(...)

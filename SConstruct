@@ -2,75 +2,122 @@ import re
 import clang.cindex
 import json
 
-SCRIPT_REGEX = re.compile('class\s+([\w_]+)(?:\s*:\s*(?:public\s+|private\s+|protected\s+)?([\w_]+))?[\s\n]*{[\s\n]*EXPORT_CLASS\(.*\);?|EXPORT_METHOD\((.*)\)[\s\n]+([\w<> ]+)\s+([\w_]+)\((.*)\)')
-
+# TODO
+#	Register class
+#	Register abstract class
+#	Generate _bind_methods:
+#		Simple bind
+#		With args decsription
+#		With DEFVAL
+#		Static methods
+#		With varargs
+#	Properties
+#	Group/subgroup of properties
+#	Signals
+#
+#	Constants
+#	Enums
+#	Bitfields
+#
+#	Constants w/o class
+#	Enums w/o class
+#	
+#	RPCs
 ########## CLANG
 def extract_methods_and_fields(translation_unit):
 
-	godot_class = { 'name' : None,
-			'properties' : [],
-			'methods' : []
-		}
-	current_property = None
+	godot_class = {}
+	current_class = None
+	current_access = 'private'
 
-	def parse_cursor(cursor, depth = 0):
-		#print('' * depth, f'{cursor.kind}')
+	def parse_class(parent, class_name):
+		for cursor in parent.get_children():
+
+			print(cursor.kind)
+			print(int(cursor.extent.start.offset))
+			#print(vars(cursor.extent.start).items())
+			print([i.spelling for i in cursor.get_tokens()])
+			match cursor.kind:
+				case clang.cindex.CursorKind.CXX_ACCESS_SPEC_DECL:
+					current_access = cursor.spelling
+
+				case clang.cindex.CursorKind.CXX_BASE_SPECIFIER:
+					godot_class[class_name]['base'] = cursor.type.spelling
+
+				case clang.cindex.CursorKind.CXX_METHOD:
+					godot_class[class_name]['methods'].append({	   'name' : cursor.spelling,
+									   'return' : cursor.result_type.spelling,
+									   'args' : [(arg.type.spelling, arg.spelling) for arg in cursor.get_arguments()],
+									   'position' : cursor.extent.start.offset
+						})
+				case clang.cindex.CursorKind.FIELD_DECL:
+					godot_class['properties'].append({ 	'type' : cursor.type.spelling,
+				       						'name' : cursor.spelling,
+				       						'position' : cursor.extent.start.offset})
+
+
+	def parse_cursor(cursor):
+		#print(cursor.kind)
 		#print([i.spelling for i in cursor.get_tokens()])
 		match cursor.kind:
 			case clang.cindex.CursorKind.CLASS_DECL:
-				#if godot_class['name'] != None:
-				#	print("Multiple class definitions not allowed")
-				#	exit(1)
-
-				godot_class['name'] = cursor.spelling
 				tokens = cursor.get_tokens()
 				for token in tokens:
 					if token.spelling == ':': # base class declaration after
 						m = [next(tokens).spelling, next(tokens).spelling]
 						match m:
-							case ['public' | 'private' | 'protected' as type, base]:
-								godot_class['base'] = base
-							case [base]:
-								godot_class['base'] = base
+							case ['public' | 'private' | 'protected', base] | [base]:
+							current_class = cursor.spelling
+							godot_class[current_class] = {	'properties' : [],
+											'methods' : [],
+				     							'base' : base
+								}
+								parse_class(cursor, current_class)
+							case _:
+								return
 
-						break
+			case clang.cindex.CursorKind.MACRO_INSTANTIATION:
+				match cursor.spelling:
+					case 'GCLASS':
+						print('----- PARSING GDCLASS ---------')
+
+					case 'GPROPERTY':
+						print('----- PARSING GPROPERTY ---------')
+						macros_locations.append(cursor.extent.start.offset)
 
 
-			case clang.cindex.CursorKind.CXX_BASE_SPECIFIER:
-                		godot_class['base'] = cursor.type.spelling
-
-			case clang.cindex.CursorKind.CXX_METHOD:
-				godot_class['methods'].append({	   'name' : cursor.spelling,
-				      				   'return' : cursor.result_type.spelling,
-				      				   'args' : [{  'name' : arg.type.spelling,
-			    							'type' : arg.spelling} for arg in cursor.get_arguments()]})
-			case clang.cindex.CursorKind.FIELD_DECL:
-				if cursor.spelling != 'GCLASS':
-					current_property = cursor.spelling
-					godot_class['properties'].append({ 'name' : cursor.spelling,
-									   'type' : cursor.type.spelling})
 
 		for child in cursor.get_children():
-			parse_cursor(child, depth + 1)
+			parse_cursor(child)
 
 
 	parse_cursor(translation_unit.cursor)
 	# Recursively traverse the child nodes
 	
+	print('------------ MACROS LOCATIONS -------------')
+	print(macros_locations)
+	print('------------ PROPERTIES LOCATIONS -------------')
+	print(props_locations)
 	return godot_class
 
 def parse_cpp_file(filename):
 	index = clang.cindex.Index.create()
-	translation_unit = index.parse(filename, args=['-DGDCLASS'])
+	translation_unit = index.parse(filename, args=['-DGDCLASS'], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
 		print("Error: Failed to parse the translation unit!")
 		return
 
-	return extract_methods_and_fields(translation_unit)
+	#return extract_methods_and_fields(translation_unit)
+	data = extract_methods_and_fields(translation_unit)
+	print(f'Parsed data from {filename}:')
+	print(json.dumps(data, indent=2, sort_keys=True))
 
 def generate_register_header(target, source, env):
-	defs = env['DEFS']
+	if env['REGENERATE'] == False:
+		return
+
+	defs = env['defs']
 	print('-------------- GENERATING HEADER ---------------')
 	header = ''
 	for file, class_defs in defs.items():
@@ -120,13 +167,12 @@ def build_scripts(target, source, env):
 		env['REGENERAGE'] = True
 		env['defs'] = load_defs()
 	
-	defs[str(source[0])] = parse_cpp_file(str(source[0]))
-	print("Parsed definitions: ", defs[str(source[0])])
+	env['defs'][str(source[0])] = parse_cpp_file(str(source[0]))
+	#print("Parsed definitions: ", defs[str(source[0])])
 	
 
 
 def emitter(target, source, env):
-	print('------------------ EMITTER ------------------------')
 	sources = [str(i) for i in source if str(i) != 'register_types.os']
 	for src in sources:
 		env.AddPreAction(str(src), build_scripts)
@@ -138,11 +184,7 @@ env = envcpp.Clone()
 #env['suffix'] = '.o'
 sources = Glob("*.cpp", exclude=['register_types.cpp'])
 env['REGENERATE'] = False
-env['SCRIPT_SOURCES'] = sources
-env['GEN_HEADER'] = ['', '', '']
 #TEST
-defs = load_defs()
-env['DEFS'] = defs
 
 env.Append(LIBEMITTER=emitter)
 
