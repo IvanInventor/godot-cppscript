@@ -3,6 +3,7 @@ import clang.cindex
 import json
 
 REGENERATE = False
+SCRIPTS_GEN_PATH = 'src/scripts.gen.h'
 scripts = []
 # TODO
 #	Register class
@@ -107,19 +108,21 @@ def parse_cpp_file(filename):
 	return data
 
 def generate_register_header(target, source, env):
-	#TODO: fix always false
-	#if env['REGENERATE'] == False:
-	#	return
+	defs = {}
+	for s in scripts:
+		defs |= parse_cpp_file(s)
 
 	print('-------------- GENERATING HEADER ---------------')
-	defs = env['defs']
+
 	header = ''
 	# Generate include headers
 	for file in scripts:
 		header += f'#include <{file}>\n'
+	
+	header += '\nusing namespace godot;\n\n'
 	# Generate register_classes function
 	register_classes_str = 'inline void register_script_classes() {\n'
-	register_classes_str += ''.join([f"ClassDB::register_class<{i}>();\n" for i in defs.keys()])
+	register_classes_str += ''.join([f"	ClassDB::register_class<{i}>();\n" for i in defs.keys()])
 	register_classes_str += '}\n'
 	header += register_classes_str
 	# Generate _bind_methods for each class
@@ -139,7 +142,7 @@ def generate_register_header(target, source, env):
 		bind += '};\n\n'
 		header += bind
 
-	with open('scripts.gen.h', 'w') as file:
+	with open(SCRIPTS_GEN_PATH, 'w') as file:
 		file.write(header)
 	
 	save_defs(defs)
@@ -177,18 +180,13 @@ def emitter(target, source, env):
 		env.AddPreAction(str(src), build_scripts)
 	return target, source
 
-envcpp = SConscript('godot-cpp/SConstruct')
-env = envcpp.Clone()
-env.Append(CPPPATH='.')
-#env = Environment()
-#env['suffix'] = '.o'
-sources = Glob("src/*.cpp", exclude=['register_types.cpp'])
-scripts = [str(i) for i in Glob("src/*.hpp")]
-#env['REGENERATE'] = False
-#env['register_classes'] = []
-#TEST
+env = SConscript('godot-cpp/SConstruct')
 
-env.Append(LIBEMITTER=emitter)
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp", exclude=['src/register_types.cpp'])
+scripts = [str(i) for i in Glob("src/*.hpp")]
+
+#env.Append(LIBEMITTER=emitter)
 
 library_name = 'bin/libscripts' + env['OBJSUFFIX']
 static_library = env.StaticLibrary(
@@ -199,11 +197,31 @@ static_library = env.StaticLibrary(
 env.AddPostAction(static_library, generate_register_header)
 
 env.Append(LIBPATH=['bin/'])
-env.Append(LIBs=[static_library[0]])
-library = env.SharedLibrary(
-		'#bin/libscripts{}{}'.format(env['suffix'], env['LIBSUFFIX']),
-		source=['register_types.cpp']
-		)
-env.Depends(library, static_library)
-env.Ignore(library, 'scripts.gen.h')
+env.Append(LIBS=[static_library[0]])
+
+# For the reference:
+# - CCFLAGS are compilation flags shared between C and C++
+# - CFLAGS are for C-specific compilation flags
+# - CXXFLAGS are for C++-specific compilation flags
+# - CPPFLAGS are for pre-processor flags
+# - CPPDEFINES are for pre-processor defines
+# - LINKFLAGS are for linking flags
+
+# tweak this if you want to use different folders, or more folders, to store your source code in.
+
+if env["platform"] == "macos":
+    library = env.SharedLibrary(
+        "bin/libscripts.{}.{}.framework/libgdexample.{}.{}".format(
+            env["platform"], env["target"], env["platform"], env["target"]
+        ),
+        source=sources,
+    )
+else:
+    library = env.SharedLibrary(
+        "bin/libscripts{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+        source=sources,
+    )
+
+env.Requires(library, static_library)
+env.Ignore(library, SCRIPTS_GEN_PATH)
 Default(library)
