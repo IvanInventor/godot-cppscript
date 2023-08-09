@@ -6,11 +6,11 @@ REGENERATE = False
 SCRIPTS_GEN_PATH = 'src/scripts.gen.h'
 scripts = []
 # TODO
-#	Register class
+#	+ Register class
 #	Register abstract class
 #	Generate _bind_methods:
-#		Simple bind
-#		With args decsription
+#		+ Simple bind
+#		+ With args decsription
 #		With DEFVAL
 #		Static methods
 #		With varargs
@@ -132,7 +132,8 @@ def generate_register_header(target, source, env):
 		
 		for method in content['methods']:
 			#TODO: refer to "Generate _bind_methods"
-			bind += f'	ClassDB::bind_method(D_METHOD("{method["name"]}"), &{class_name}::{method["name"]});\n'
+			args = ''.join([f', "{m[1]}"' for m in method['args']])
+			bind += f'	ClassDB::bind_method(D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
 
 		for prop in content['properties']:
 			pass
