@@ -29,8 +29,7 @@ scripts = []
 ########## CLANG
 def extract_methods_and_fields(translation_unit):
 
-	godot_class = {}
-	current_class = None
+	classes = {}
 	current_access = 'private'
 	macros = []
 	def parse_class(parent, class_name):
@@ -42,16 +41,16 @@ def extract_methods_and_fields(translation_unit):
 					current_access = cursor.spelling
 
 				case clang.cindex.CursorKind.CXX_BASE_SPECIFIER:
-					godot_class[class_name]['base'] = cursor.type.spelling
+					classes[class_name]['base'] = cursor.type.spelling
 
 				case clang.cindex.CursorKind.CXX_METHOD:
-					godot_class[class_name]['methods'].append({	   'name' : cursor.spelling,
+					classes[class_name]['methods'].append({	   'name' : cursor.spelling,
 									   'return' : cursor.result_type.spelling,
 									   'args' : [(arg.type.spelling, arg.spelling) for arg in cursor.get_arguments()],
 									   'position' : cursor.extent.start.offset
 						})
 				case clang.cindex.CursorKind.FIELD_DECL:
-					godot_class[class_name]['properties'].append({ 	'type' : cursor.type.spelling,
+					classes[class_name]['properties'].append({ 	'type' : cursor.type.spelling,
 				       						'name' : cursor.spelling,
 				       						'position' : cursor.extent.start.offset})
 
@@ -61,24 +60,18 @@ def extract_methods_and_fields(translation_unit):
 		#print([i.spelling for i in cursor.get_tokens()])
 		match cursor.kind:
 			case clang.cindex.CursorKind.CLASS_DECL:
-				tokens = cursor.get_tokens()
-				for token in tokens:
-					if token.spelling == ':': # base class declaration after
-						m = [next(tokens).spelling, next(tokens).spelling]
-						match m:
-							case ['public' | 'private' | 'protected', base] | [base]:
-								current_class = cursor.spelling
-								godot_class[current_class] = {	'properties' : [],
-												'methods' : [],
-												'base' : base
-									}
-								parse_class(cursor, current_class)
-							case _:
-								return
+				if cursor.spelling in classes.keys():
+					parse_class(cursor, cursor.spelling)
 
 			case clang.cindex.CursorKind.MACRO_INSTANTIATION:
 				match cursor.spelling:
 					case 'GCLASS':
+						tokens = list(cursor.get_tokens())
+						class_name, base = tokens[2].spelling, tokens[4].spelling
+						classes[class_name] = {		'properties' : [],
+										'methods' : [],
+										'base' : base
+									}
 						pass
 
 					case 'GPROPERTY':
@@ -93,7 +86,7 @@ def extract_methods_and_fields(translation_unit):
 	parse_cursor(translation_unit.cursor)
 	# Recursively traverse the child nodes
 	
-	return godot_class
+	return classes
 
 def parse_cpp_file(filename):
 	index = clang.cindex.Index.create()
