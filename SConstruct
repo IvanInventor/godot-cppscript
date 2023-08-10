@@ -12,7 +12,7 @@ scripts = []
 #		+ Simple bind
 #		+ With args decsription
 #		With DEFVAL
-#		Static methods
+#		+ Static methods
 #		With varargs
 #	Properties
 #	Group/subgroup of properties
@@ -47,7 +47,8 @@ def extract_methods_and_fields(translation_unit):
 					classes[class_name]['methods'].append({	   'name' : cursor.spelling,
 									   'return' : cursor.result_type.spelling,
 									   'args' : [(arg.type.spelling, arg.spelling) for arg in cursor.get_arguments()],
-									   'position' : cursor.extent.start.offset
+									   'position' : cursor.extent.start.offset,
+					    				   'is_static' : cursor.is_static_method()
 						})
 				case clang.cindex.CursorKind.FIELD_DECL:
 					classes[class_name]['properties'].append({ 	'type' : cursor.type.spelling,
@@ -126,7 +127,9 @@ def generate_register_header(target, source, env):
 		for method in content['methods']:
 			#TODO: refer to "Generate _bind_methods"
 			args = ''.join([f', "{m[1]}"' for m in method['args']])
-			bind += f'	ClassDB::bind_method(D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
+			bind += f'	ClassDB::bind_method(D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n' \
+					if method['is_static'] == False else \
+				f'	ClassDB::bind_static_method("{class_name}", D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
 
 		for prop in content['properties']:
 			pass
