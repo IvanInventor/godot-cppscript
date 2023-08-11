@@ -206,7 +206,8 @@ def generate_register_header(target, source, env):
 	header = ''
 	# Generate include headers
 	for file in scripts:
-		header += f'#include <{file}>\n'
+		#TEMP FIX of <src/****>
+		header += f'#include "{file[4:]}"\n'
 	
 	header += '\nusing namespace godot;\n\n'
 	# Generate register_classes function
@@ -289,17 +290,24 @@ scripts = [str(i) for i in Glob("src/*.hpp")]
 
 #env.Append(LIBEMITTER=emitter)
 
-library_name = 'bin/libscripts' + env['OBJSUFFIX']
+library_name = 'libscripts-static' + env['suffix'] + env['LIBSUFFIX']
+print(env['suffix'] + '_' + env['LIBSUFFIX'])
 static_library = env.StaticLibrary(
-	library_name,
+	'bin/' + library_name,
 	source=sources
 	)
 
-env.AddPostAction(static_library, generate_register_header)
+print(static_library)
+env.AddPreAction(static_library[0], generate_register_header)
 
-env.Append(LIBPATH=['bin/'])
-env.Append(LIBS=[static_library[0]])
+#env.Append(LIBPATH=['godot-coo/bin'])
+#env.Append(LIBS="libgodot-cpp{}{}".format(env['suffix'], env["LIBSUFFIX"]))
 
+#env.Append(LIBPATH=['bin'])
+#env.Append(LIBS=[library_name])
+
+#print(env['LIBPATH'])
+#print(env['LIBS'])
 # For the reference:
 # - CCFLAGS are compilation flags shared between C and C++
 # - CFLAGS are for C-specific compilation flags
@@ -320,7 +328,7 @@ if env["platform"] == "macos":
 else:
     library = env.SharedLibrary(
         "bin/libscripts{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
-        source=sources,
+        source=['src/register_types.cpp' + 'src/' + library_name],
     )
 
 env.Requires(library, static_library)
