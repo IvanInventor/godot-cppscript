@@ -2,9 +2,9 @@ import re
 import clang.cindex
 import json
 
-REGENERATE = False
-SCRIPTS_GEN_PATH = 'src/scripts.gen.h'
-KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP']
+
+CPPPATH = 'src/'
+KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT']
 scripts = []
 # TODO
 #	+ Register class
@@ -15,11 +15,11 @@ scripts = []
 #		With DEFVAL
 #		+ Static methods
 #		With varargs
-#	Properties
+#	+- Properties
 #	+ Group/subgroup of properties
 #	Signals
 #
-#	Constants
+#	+ Constants
 #	Enums
 #	Bitfields
 #
@@ -55,29 +55,35 @@ def extract_methods_and_fields(translation_unit):
 		classes[class_name]['end'] = parent.extent.end.offset
 		for cursor in parent.get_children():
 			match cursor.kind:
-				#case clang.cindex.CursorKind.CXX_ACCESS_SPEC_DECL:
-				#	current_access = cursor.access_specifier
-				#	print('----------- ACCESS --------------')
-				#	print(current_access)
-
 				case clang.cindex.CursorKind.CXX_BASE_SPECIFIER:
 					classes[class_name]['base'] = cursor.type.spelling
 
 				case clang.cindex.CursorKind.CXX_METHOD:
 					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
-						classes[class_name]['methods'].append({	   'name' : cursor.spelling,
-					     						'token_type' : 'method',
-										   'return' : cursor.result_type.spelling,
-										   'args' : [(arg.type.spelling, arg.spelling) for arg in cursor.get_arguments()],
-										   'position' : cursor.extent.start.offset,
-										   'is_static' : cursor.is_static_method()
-							})
-				case clang.cindex.CursorKind.FIELD_DECL:
-					classes[class_name]['properties'].append({ 	'type' : cursor.type.spelling,
-					       						'token_type' : 'property',
-				       						'name' : cursor.spelling,
-				       						'position' : cursor.extent.start.offset})
+						classes[class_name]['methods'].append({
+							'name' : cursor.spelling,
+					     		'token_type' : 'method',
+							'return' : cursor.result_type.spelling,
+							'args' : [(arg.type.spelling, arg.spelling) for arg in cursor.get_arguments()],
+							'position' : cursor.extent.start.offset,
+							'is_static' : cursor.is_static_method()})
 
+				case clang.cindex.CursorKind.FIELD_DECL:
+					classes[class_name]['properties'].append({
+						'type' : cursor.type.spelling,
+					       	'token_type' : 'property',
+				       		'name' : cursor.spelling,
+				       		'position' : cursor.extent.start.offset})
+				
+				case clang.cindex.CursorKind.ENUM_DECL:
+					print('ENUM FOUND')
+					for enum in cursor.get_children():
+						if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
+							classes[class_name]['constants'].append({
+								'name' : enum.spelling,
+								'enum_name' : enum.type.spelling,
+								'position' : enum.extent.start.offset,
+								'token_type' : 'constant'})
 
 	def parse_cursor(cursor):
 		#print(cursor.kind)
@@ -89,22 +95,23 @@ def extract_methods_and_fields(translation_unit):
 
 			case clang.cindex.CursorKind.MACRO_INSTANTIATION:
 				if cursor.spelling in KEYWORDS:
-					macros.append({	'macros_name': cursor.spelling,
-		    					'position' : cursor.extent.start.offset,
-		    					'content' : [t.spelling for t in cursor.get_tokens()][2:-1]})
+					macros.append({
+						'macros_name': cursor.spelling,
+		    				'position' : cursor.extent.start.offset,
+		    				'content' : [t.spelling for t in cursor.get_tokens()][2:-1]})
 
 				match cursor.spelling:
 					case 'GCLASS':
 						#OLD
 						tokens = list(cursor.get_tokens())
 						class_name, base = tokens[2].spelling, tokens[4].spelling
-						classes[class_name] = {		'properties' : [],
-										'methods' : [],
-										'base' : base,
-			     							'groups' : set(),
-			     							'subgroups' : set()
-									}
-						pass
+						classes[class_name] = {
+								'properties' : [],
+								'methods' : [],
+								'constants' : [],
+								'base' : base,
+			     					'groups' : set(),
+			     					'subgroups' : set()}
 
 					case 'GPROPERTY':
 						pass
@@ -122,17 +129,17 @@ def extract_methods_and_fields(translation_unit):
 	for class_name, content in classes.items():
 		start, end = content['position'], content['end']
 		class_macros = [m for m in macros if start < m['position'] < end]
-		class_macros += content['methods'] + content['properties']
+		class_macros += content['methods'] + content['properties'] + content['constants']
 		class_macros = sorted(class_macros, key=lambda x: x['position'])
 		group = ['', '']
-		#print('************ APPLY MACROS ***********')
-		#print(json.dumps(class_macros, sort_keys=True, indent=2))
+		print('************ APPLY MACROS ***********')
+		print(json.dumps(class_macros, sort_keys=True, indent=2))
 		#print(json.dumps(class_macros, sort_keys=True, indent=2))
 
 		def apply_macros(item, macros):
-			print('========= Applying ============')
-			print(json.dumps(item, sort_keys=True, indent=2))
-			print(json.dumps(macros, sort_keys=True, indent=2))
+			#print('========= Applying ============')
+			#print(json.dumps(item, sort_keys=True, indent=2))
+			#print(json.dumps(macros, sort_keys=True, indent=2))
 
 			for macro in macros:
 				match macro['macros_name']:
@@ -162,6 +169,9 @@ def extract_methods_and_fields(translation_unit):
 							classes[class_name]['subgroups'].add(group[1])
 							group[1] = group[1].lower().replace(' ', '_') + '_'
 
+					case 'GCONSTANT':
+						print('GCONSTANT collapsed')
+						item |= {'register' :  True}
 			return item
 
 						
@@ -201,8 +211,7 @@ def generate_register_header(target, source, env):
 	for s in scripts:
 		defs |= parse_cpp_file(s)
 
-	print('-------------- GENERATING HEADER ---------------')
-
+	#print('-------------- GENERATING HEADER ---------------')
 	header = ''
 	# Generate include headers
 	for file in scripts:
@@ -216,7 +225,6 @@ def generate_register_header(target, source, env):
 	register_classes_str += '}\n'
 	header += register_classes_str
 	# Generate _bind_methods for each class
-	bind_methods_all_str = ''
 	for class_name, content in defs.items():
 		bind = f'void {class_name}::_bind_methods() {{\n'
 		
@@ -229,94 +237,43 @@ def generate_register_header(target, source, env):
 
 		for method in content['methods']:
 			#TODO: refer to "Generate _bind_methods"
-			args = ''.join([f', "{m[1]}"' for m in method['args']])
-			bind += f'	ClassDB::bind_method(D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n' \
-					if method['is_static'] == False else \
-				f'	ClassDB::bind_static_method("{class_name}", D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
+			args = ''.join([f', "{m[1]}"' if m[1] != '' else '' for m in method['args']])
+			if method['is_static']:
+				bind += f'	ClassDB::bind_static_method("{class_name}", D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
+			else:
+				bind += f'	ClassDB::bind_method(D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
 
-		for prop in [p for p in content['properties'] if 'register' in p.keys()]:
-			bind += f'	ADD_PROPERTY(PropertyInfo({prop["register"]["type"]}, "{prop["name"]}"), "{prop["register"]["setter"]}", "{prop["register"]["getter"]}");\n'
+		for prop in content['properties']:
+			if 'register' in prop.keys():
+				bind += f'	ADD_PROPERTY(PropertyInfo({prop["register"]["type"]}, "{prop["name"]}"), "{prop["register"]["setter"]}", "{prop["register"]["getter"]}");\n'
+
+		for const in content['constants']:
+			if 'register' in const.keys():
+				bind += f'	BIND_ENUM_CONSTANT({const["name"]});\n'
 
 		bind += '};\n\n'
-		header += bind
-	print('--- DEFS ---')
 
-	print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
-	with open(SCRIPTS_GEN_PATH, 'w') as file:
+		for const in { enum['enum_name'] for enum in content['constants'] if 'register' in enum}:
+			bind += f'VARIANT_ENUM_CAST({const});\n'
+
+		header += bind
+
+	#print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
+	with open(CPPPATH + 'scripts.gen.h', 'w') as file:
 		file.write(header)
 	
 	#save_defs(defs)
 
 ########### CLANG
-SPP_DEFS_FILE = '.spp_defs'
-def load_defs():
-	try:
-		with open(SPP_DEFS_FILE, 'r') as file:
-			return json.load(file)
-	except:
-		return {}
-
-def save_defs(defs):
-	print("Saving: *****")
-	print(defs)
-	#print(json.dumps(defs, sort_keys=True, indent=2))
-	with open(SPP_DEFS_FILE, 'w') as file:
-		json.dump(defs, file)
-
-def build_scripts(target, source, env):
-	global REGENERATE
-	if not REGENERATE:
-		REGENERATE = True
-		env['defs'] = load_defs()
-	
-	header = str(source[0])[:-4] + '.hpp'
-	data = parse_cpp_file(header)
-	env['defs'] |= data
-	#print("Parsed definitions: ", defs[str(source[0])])
-	
-
-
-def emitter(target, source, env):
-	sources = [str(i) for i in source if str(i) != 'register_types.os']
-	for src in sources:
-		env.AddPreAction(str(src), build_scripts)
-	return target, source
 
 env = SConscript('godot-cpp/SConstruct')
 
-env.Append(CPPPATH=["src/"])
-sources = Glob("src/*.cpp", exclude=['src/register_types.cpp'])
+env.Append(CPPPATH=[CPPPATH])
+sources = Glob("src/*.cpp", exclude=['src/register_types.cpp']) + Glob('src/register_types.cpp')
 scripts = [str(i) for i in Glob("src/*.hpp")]
+generate_register_header(None, None, None)
 
-#env.Append(LIBEMITTER=emitter)
-
-library_name = 'libscripts-static' + env['suffix'] + env['LIBSUFFIX']
-print(env['suffix'] + '_' + env['LIBSUFFIX'])
-static_library = env.StaticLibrary(
-	'bin/' + library_name,
-	source=sources
-	)
-
-print(static_library)
-env.AddPreAction(static_library[0], generate_register_header)
-
-#env.Append(LIBPATH=['godot-coo/bin'])
-#env.Append(LIBS="libgodot-cpp{}{}".format(env['suffix'], env["LIBSUFFIX"]))
-
-#env.Append(LIBPATH=['bin'])
-#env.Append(LIBS=[library_name])
-
-#print(env['LIBPATH'])
-#print(env['LIBS'])
-# For the reference:
-# - CCFLAGS are compilation flags shared between C and C++
-# - CFLAGS are for C-specific compilation flags
-# - CXXFLAGS are for C++-specific compilation flags
-# - CPPFLAGS are for pre-processor flags
-# - CPPDEFINES are for pre-processor defines
-# - LINKFLAGS are for linking flags
-
-# tweak this if you want to use different folders, or more folders, to store your source code in.
+library_name = 'libscripts' + env['suffix'] + env['LIBSUFFIX']
 
 if env["platform"] == "macos":
     library = env.SharedLibrary(
@@ -328,9 +285,8 @@ if env["platform"] == "macos":
 else:
     library = env.SharedLibrary(
         "bin/libscripts{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
-        source=['src/register_types.cpp' + 'src/' + library_name],
+        source=sources,
     )
 
-env.Requires(library, static_library)
-env.Ignore(library, SCRIPTS_GEN_PATH)
+env.Ignore(library, CPPPATH + 'scripts.gen.h')
 Default(library)

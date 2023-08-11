@@ -11,3 +11,4 @@ static void _bind_methods();
 #define GMETHOD(...)
 #define GGROUP(...)
 #define GSUBGROUP(...)
+#define GCONSTANT(...)
