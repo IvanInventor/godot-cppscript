@@ -161,21 +161,20 @@ def extract_methods_and_fields(translation_unit):
 						if len(args) != 2:
 							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
 
-						name = group[0] + group[1] + item.spelling
+					
+						name = group[0].lower().replace(" ", "") + "_" + group[1].lower().replace(" ", "") + "_" + item.spelling
 						class_defs['properties'].append([item.type.spelling, name] + args)
 
 					case 'GGROUP':
 						group[0] = ' '.join([i.spelling for i in macro.get_tokens()][2:-1])
 						if group[0] != '':
-							class_defs['groups'].add(group[0])
-							group[0] = group[0].lower().replace(' ', '_') + '_'
+							class_defs['groups'].add((group[0], group[0].lower().replace(" ", "") + "_"))
 						group[1] = ''
 
 					case 'GSUBGROUP':
 						group[1] = ' '.join([i.spelling for i in macro.get_tokens()][2:-1])
 						if group[1] != '':
-							class_defs['subgroups'].add(group[1])
-							group[1] = group[1].lower().replace(' ', '_') + '_'
+							class_defs['subgroups'].add((group[1], group[0].lower().replace(" ", "") + "_" + group[1].lower().replace(" ", "") + "_"))
 
 					case 'GCONSTANT':
 						pass
@@ -236,11 +235,11 @@ def generate_register_header(target, source, env):
 		outside_bind = ''
 		
 		#Groups/subgroups declarations
-		for g in content['groups']:
-			bind += f'	ADD_GROUP("{g}", "{g.lower().replace(" ", "_") + "_"}");\n'
+		for group, name in content['groups']:
+			bind += f'	ADD_GROUP("{group}", "{name}");\n'
 
-		for g in content['subgroups']:
-			bind += f'	ADD_SUBGROUP("{g}", "{g.lower().replace(" ", "_") + "_"}");\n'
+		for group, name in content['subgroups']:
+			bind += f'	ADD_SUBGROUP("{group}", "{name}");\n'
 
 		for method in content['methods']:
 			#TODO: refer to "Generate _bind_methods"
@@ -251,7 +250,7 @@ def generate_register_header(target, source, env):
 				bind += f'	ClassDB::bind_method(D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
 
 		for prop in content['properties']:
-			type, name, getter, setter = prop
+			type, name, setter, getter = prop
 			bind += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"), "{setter}", "{getter}");\n'
 
 		for enum, consts in content['enum_constants'].items():
