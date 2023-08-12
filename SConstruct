@@ -68,10 +68,11 @@ def extract_methods_and_fields(translation_unit):
 					class_cursors.append(cursor)
 								
 				case clang.cindex.CursorKind.ENUM_DECL:
-					class_cursors.append(cursor)
-					for enum in cursor.get_children():
-						if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
-							class_cursors.append(enum)
+					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
+						class_cursors.append(cursor)
+						for enum in cursor.get_children():
+							if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
+								class_cursors.append(enum)
 						
 	def parse_cursor(cursor):
 		match cursor.kind:
@@ -134,10 +135,17 @@ def extract_methods_and_fields(translation_unit):
 							'args' : [(arg.type.spelling, arg.spelling) for arg in item.get_arguments()],
 							'is_static' : item.is_static_method()})
 
-				print([[j.spelling for j in i.get_tokens()] for i in item.get_children()])
-				print([i.spelling for i in item.get_tokens()])
-				print([[j.spelling for j in i.get_tokens()] for i in item.get_arguments()])
+			elif item.kind == clang.cindex.CursorKind.ENUM_DECL:
+				if item.type.spelling[-1] != ')':
+					class_defs['enum_constants'][item.type.spelling] = set()
 
+			elif item.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
+				has_name = item.type.spelling[-1] != ')'
+				if has_name:
+					class_defs['enum_constants'][item.type.spelling].add(item.spelling)
+				else:
+					class_defs['enum_unnamed'].add(item.spelling)
+			
 			for macro in macros:
 				match macro.spelling:
 					case 'GMETHOD':
@@ -170,30 +178,7 @@ def extract_methods_and_fields(translation_unit):
 							group[1] = group[1].lower().replace(' ', '_') + '_'
 
 					case 'GCONSTANT':
-						print('GCONSTANT')
-						print(item.type.spelling)
-						has_name = item.type.spelling[-1] != ')'
-						if item.kind == clang.cindex.CursorKind.ENUM_DECL:
-							for enum in item.get_children():
-								if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
-									if has_name :
-										enums = class_defs['enum_constants'].get(enum.type.spelling, set())
-										enums.add(enum.spelling)
-										class_defs['enum_constants'][enum.type.spelling] = enums
-									else:
-										class_defs['enum_unnamed'].add(enum.spelling)
-
-						elif item.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
-							if has_name:
-								enums = class_defs['enum_constants'].get(item.type.spelling, set())
-								enums.add(item.spelling)
-								class_defs['enum_constants'][item.type.spelling] = enums
-								
-							else:
-								class_defs['enum_unnamed'].add(item.spelling)
-						
-						else:
-							raise Exception(f'Incorrect macro usage at {macro.location.line}:{macro.location.column}')
+						pass
 			return item
 
 						
