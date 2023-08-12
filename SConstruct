@@ -147,14 +147,14 @@ def extract_methods_and_fields(translation_unit):
 						# fail check here
 						if item.kind != clang.cindex.CursorKind.FIELD_DECL:
 							#TODO line:column error
-							raise Exception('Incorrect macro usage')
+							raise Exception(f'Incorrect macro usage at {macro.location.line}:{macro.location.column}')
 
 						args = ''.join([i.spelling for i in macro.get_tokens()][2:-1]).split(',')
-						if len(args) != 3:
-							raise Exception('Incorrect macro usage')
+						if len(args) != 2:
+							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
 
 						name = group[0] + group[1] + item.spelling
-						class_defs['properties'].append([name] + args)
+						class_defs['properties'].append([item.type.spelling, name] + args)
 
 					case 'GGROUP':
 						group[0] = ' '.join([i.spelling for i in macro.get_tokens()][2:-1])
@@ -193,7 +193,7 @@ def extract_methods_and_fields(translation_unit):
 								class_defs['enum_unnamed'].add(item.spelling)
 						
 						else:
-							raise Exception('Incorrect macro usage')
+							raise Exception(f'Incorrect macro usage at {macro.location.line}:{macro.location.column}')
 			return item
 
 						
@@ -266,8 +266,8 @@ def generate_register_header(target, source, env):
 				bind += f'	ClassDB::bind_method(D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
 
 		for prop in content['properties']:
-			name, type, getter, setter = prop
-			bind += f'	ADD_PROPERTY(PropertyInfo({type}, "{name}"), "{setter}", "{getter}");\n'
+			type, name, getter, setter = prop
+			bind += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"), "{setter}", "{getter}");\n'
 
 		for enum, consts in content['enum_constants'].items():
 			outside_bind += f'VARIANT_ENUM_CAST({enum});'
