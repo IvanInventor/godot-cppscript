@@ -4,7 +4,7 @@ import json
 
 
 CPPPATH = 'src/'
-KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT']
+KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIELD']
 scripts = []
 # TODO
 #	+ Register class
@@ -49,7 +49,8 @@ def apply_macros(target, macros):
 
 def extract_methods_and_fields(translation_unit):
 
-	classes = []
+	classes = {}
+	found_classes = []
 	macros = []
 	bases_temp = {}
 	def parse_class(parent, class_cursors):
@@ -70,17 +71,15 @@ def extract_methods_and_fields(translation_unit):
 				case clang.cindex.CursorKind.ENUM_DECL:
 					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
 						class_cursors.append(cursor)
-						for enum in cursor.get_children():
-							if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
-								class_cursors.append(enum)
-						
+
 	def parse_cursor(cursor):
+		#tokens = cursor.get_tokens()
+		#print([(i.spelling, i.kind, i.location.line) for i in tokens])
 		match cursor.kind:
 			case clang.cindex.CursorKind.CLASS_DECL:
 				# rewrite after GCLASS implement
 				cursors = []
-				classes.append((cursor, cursors))
-				parse_class(cursor, cursors)
+				found_classes.append(cursor)
 
 			case clang.cindex.CursorKind.MACRO_INSTANTIATION:
 				if cursor.spelling in KEYWORDS:
@@ -89,8 +88,8 @@ def extract_methods_and_fields(translation_unit):
 				match cursor.spelling:
 					case 'GCLASS':
 						#TODO
+						found_classes.append(cursor)
 						tokens = list(cursor.get_tokens())
-						bases_temp[tokens[2].spelling] = tokens[4].spelling
 
 					case 'GPROPERTY':
 						pass
@@ -105,18 +104,31 @@ def extract_methods_and_fields(translation_unit):
 	parse_cursor(translation_unit.cursor)
 	# Recursively traverse the child nodes
 	# Map macros to methods/properties
+
+	found_class = sorted(found_classes, key=lambda x: x.extent.start.offset, reverse=True)	
+	def add_class(cursor, macros):
+		if len(macros) > 1:
+			raise Exception(f'Incorrect usage of GCLASS at <{macros[1].location.file.name}>:{macros[1].location.line}:{macros[1].location.column}')
+		
+		for macro in macros:
+			classes[cursor.spelling] = {
+				'base' : list(macro.get_tokens())[4].spelling,
+				'methods' : [],
+				'properties' : [],
+				'groups' : set(),
+				'subgroups' : set(),
+				'enum_constants' : {},
+				'enum_unnamed' : set(),
+				'constants' : set(),
+				'bitfields' : {}
+				}
+
+	collapse_list(found_class, lambda x: x.kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
+	print(classes)
+	exit(1)
+		
 	parsed_classes = {}
-	for cursor, child_cursors in classes:
-		class_defs = {
-			'base' : bases_temp[cursor.spelling],
-			'methods' : [],
-			'properties' : [],
-			'groups' : set(),
-			'subgroups' : set(),
-			'enum_constants' : {},
-			'enum_unnamed' : set(),
-			'constants' : set()
-			}
+	for cursor, class_defs in classes:
 		group = ['', '']
 		start, end = cursor.extent.start.offset, cursor.extent.end.offset
 		class_macros = sorted([m for m in macros if start < m.extent.start.offset < end] + child_cursors, key=lambda x: x.extent.start.offset)
@@ -136,15 +148,15 @@ def extract_methods_and_fields(translation_unit):
 							'is_static' : item.is_static_method()})
 
 			elif item.kind == clang.cindex.CursorKind.ENUM_DECL:
+				enums = []
 				if item.type.spelling[-1] != ')':
-					class_defs['enum_constants'][item.type.spelling] = set()
+					enum_type = 'enum_constants'
 
-			elif item.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
-				has_name = item.type.spelling[-1] != ')'
-				if has_name:
-					class_defs['enum_constants'][item.type.spelling].add(item.spelling)
-				else:
-					class_defs['enum_unnamed'].add(item.spelling)
+				for enum in item.get_children():
+					if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
+						enums.append(enum.spelling)
+
+			
 			
 			for macro in macros:
 				match macro.spelling:
@@ -163,7 +175,10 @@ def extract_methods_and_fields(translation_unit):
 
 					
 						name = group[0].lower().replace(" ", "") + "_" + group[1].lower().replace(" ", "") + "_" + item.spelling
-						class_defs['properties'].append([item.type.spelling, name] + args)
+						# Workaround
+						tokens = [i.spelling for i in item.get_tokens()]
+						type = ''.join(tokens[:tokens.index(item.spelling)])
+						class_defs['properties'].append([type, name] + args)
 
 					case 'GGROUP':
 						group[0] = ' '.join([i.spelling for i in macro.get_tokens()][2:-1])
@@ -176,13 +191,27 @@ def extract_methods_and_fields(translation_unit):
 						if group[1] != '':
 							class_defs['subgroups'].add((group[1], group[0].lower().replace(" ", "") + "_" + group[1].lower().replace(" ", "") + "_"))
 
-					case 'GCONSTANT':
-						pass
+					case 'GBITFIELD':
+						if item.kind != clang.cindex.CursorKind.ENUM_DECL:
+							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
+
+						if item.type.spelling[-1] == ')':
+							raise Exception(f'Bitfield must be named enum <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
+
+						print('------- BITFIELD---------')
+						enum_type = 'bitfields'
+
+			if item.kind == clang.cindex.CursorKind.ENUM_DECL:
+				if item.type.spelling[-1] != ')':
+					class_defs[enum_type][item.type.spelling] = enums
+				else:
+					class_defs['constants'] = enums
+
 			return item
 
 						
 		collapse_list(class_macros, lambda x: x.kind != clang.cindex.CursorKind.MACRO_INSTANTIATION, apply_macros)
-		print(json.dumps(class_defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
+		#print(json.dumps(class_defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
 		parsed_classes[cursor.spelling] = class_defs
 
 	return parsed_classes
@@ -254,9 +283,14 @@ def generate_register_header(target, source, env):
 			bind += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"), "{setter}", "{getter}");\n'
 
 		for enum, consts in content['enum_constants'].items():
-			outside_bind += f'VARIANT_ENUM_CAST({enum});'
+			#outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
 			for const in consts:
 				bind += f'	BIND_ENUM_CONSTANT({const});\n'
+
+		for enum, consts in content['bitfields'].items():
+			#outside_bind += f'VARIANT_BITFIELD_CAST({enum});\n'
+			for const in consts:
+				bind += f'	BIND_BITFIELD_FLAG({const});\n'
 
 		for const in content['enum_unnamed']:
 			bind += f'	BIND_CONSTANT({const});\n'
@@ -276,12 +310,16 @@ def generate_register_header(target, source, env):
 	#save_defs(defs)
 
 ########### CLANG
-
 env = SConscript('godot-cpp/SConstruct')
+
+#opts = Variables()
+#opts.Add(BoolVariable("regenerate_bindings", "Regeenrate header", True))
+#opts.Update(env)
 
 env.Append(CPPPATH=[CPPPATH])
 sources = Glob("src/*.cpp", exclude=['src/register_types.cpp']) + Glob('src/register_types.cpp')
 scripts = [str(i) for i in Glob("src/*.hpp")]
+
 generate_register_header(None, None, None)
 
 library_name = 'libscripts' + env['suffix'] + env['LIBSUFFIX']

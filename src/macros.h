@@ -12,3 +12,4 @@ static void _bind_methods();
 #define GGROUP(...)
 #define GSUBGROUP(...)
 #define GCONSTANT(...)
+#define GBITFIELD(...)
