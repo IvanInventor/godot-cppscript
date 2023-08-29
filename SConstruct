@@ -3,7 +3,7 @@ import clang.cindex
 import json
 
 
-CPPPATH = 'src/'
+SCRIPTS_PATH = 'src/'
 KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIELD']
 scripts = []
 # TODO
@@ -33,7 +33,7 @@ def collapse_list(list, key, action):
 	collapsed = []
 	i = 0
 	tail = 0
-	for i in range(len(list)):
+	while i < len(list):
 		if key(list[i]) == True:
 			collapsed.append(action(list[i], list[tail:i]))
 			i += 1
@@ -43,51 +43,42 @@ def collapse_list(list, key, action):
 
 	return collapsed, list[tail:i]
 
-########## CLANG
-def apply_macros(target, macros):
-	pass
 
 def extract_methods_and_fields(translation_unit):
 
-	classes = {}
+	classes = []
 	found_classes = []
 	macros = []
 	bases_temp = {}
 	def parse_class(parent, class_cursors):
 		for cursor in parent.get_children():
 			match cursor.kind:
-				case clang.cindex.CursorKind.CXX_BASE_SPECIFIER:
-					#temp
-					#classes[class_name]['base'] = cursor.type.spelling
-					pass
-
 				case clang.cindex.CursorKind.CXX_METHOD:
 					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
 						class_cursors.append(cursor)
 					
 				case clang.cindex.CursorKind.FIELD_DECL:
-					class_cursors.append(cursor)
+					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
+						class_cursors.append(cursor)
 								
 				case clang.cindex.CursorKind.ENUM_DECL:
 					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
 						class_cursors.append(cursor)
 
 	def parse_cursor(cursor):
-		#tokens = cursor.get_tokens()
-		#print([(i.spelling, i.kind, i.location.line) for i in tokens])
 		match cursor.kind:
 			case clang.cindex.CursorKind.CLASS_DECL:
-				# rewrite after GCLASS implement
-				cursors = []
 				found_classes.append(cursor)
 
 			case clang.cindex.CursorKind.MACRO_INSTANTIATION:
 				if cursor.spelling in KEYWORDS:
 					macros.append(cursor)
+				
+				if cursor.spelling.startswith('GEXPORT_'):
+					macros.append(cursor)
 					
 				match cursor.spelling:
 					case 'GCLASS':
-						#TODO
 						found_classes.append(cursor)
 						tokens = list(cursor.get_tokens())
 
@@ -102,63 +93,74 @@ def extract_methods_and_fields(translation_unit):
 	
 
 	parse_cursor(translation_unit.cursor)
-	# Recursively traverse the child nodes
-	# Map macros to methods/properties
 
 	found_class = sorted(found_classes, key=lambda x: x.extent.start.offset, reverse=True)	
+
 	def add_class(cursor, macros):
 		if len(macros) > 1:
 			raise Exception(f'Incorrect usage of GCLASS at <{macros[1].location.file.name}>:{macros[1].location.line}:{macros[1].location.column}')
 		
 		for macro in macros:
-			classes[cursor.spelling] = {
-				'base' : list(macro.get_tokens())[4].spelling,
-				'methods' : [],
-				'properties' : [],
-				'groups' : set(),
-				'subgroups' : set(),
-				'enum_constants' : {},
-				'enum_unnamed' : set(),
-				'constants' : set(),
-				'bitfields' : {}
-				}
+			classes.append((cursor, list(macro.get_tokens())[4].spelling)) # Temporary base name resolution
 
 	collapse_list(found_class, lambda x: x.kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
-	print(classes)
-	exit(1)
 		
 	parsed_classes = {}
-	for cursor, class_defs in classes:
+	for cursor, base in classes:
+		class_defs = {
+			'base' : base,
+			'methods' : [],
+			'properties' : [],
+			'groups' : set(),
+			'subgroups' : set(),
+			'enum_constants' : {},
+			'enum_unnamed' : set(),
+			'constants' : set(),
+			'bitfields' : {}}
+		child_cursors = []
+		parse_class(cursor, child_cursors)
 		group = ['', '']
 		start, end = cursor.extent.start.offset, cursor.extent.end.offset
 		class_macros = sorted([m for m in macros if start < m.extent.start.offset < end] + child_cursors, key=lambda x: x.extent.start.offset)
-		#print('************ APPLY MACROS ***********')
-		#print(json.dumps(class_macros, sort_keys=True, indent=2, default=lambda x: (x.extent.start.offset, x.spelling)))
 
 		def apply_macros(item, macros):
-			#print('========= Applying ============')
-			#print(item)
-			#print(macros)
+			properties = None
+			match item.kind:
+				case clang.cindex.CursorKind.CXX_METHOD:
+					properties = {
+						'name' : item.spelling,
+						'return' : item.result_type.spelling,
+						'args' : [(arg.type.spelling, arg.spelling) for arg in item.get_arguments()],
+						'is_static' : item.is_static_method()}
 
-			if item.kind == clang.cindex.CursorKind.CXX_METHOD:
-				class_defs['methods'].append({
-							'name' : item.spelling,
-							'return' : item.result_type.spelling,
-							'args' : [(arg.type.spelling, arg.spelling) for arg in item.get_arguments()],
-							'is_static' : item.is_static_method()})
+				case clang.cindex.CursorKind.ENUM_DECL:
+					properties = []
+					if item.type.spelling[-1] != ')':
+						enum_type = 'enum_constants'
 
-			elif item.kind == clang.cindex.CursorKind.ENUM_DECL:
-				enums = []
-				if item.type.spelling[-1] != ')':
-					enum_type = 'enum_constants'
+					for enum in item.get_children():
+						if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
+							properties.append(enum.spelling)
 
-				for enum in item.get_children():
-					if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
-						enums.append(enum.spelling)
-
-			
+				case clang.cindex.CursorKind.FIELD_DECL:
+					properties = {
+						'name' : '',
+						'type' : '',
+						'setter' : '',
+						'getter' : '',
+						'hint' : 'PROPERTY_HINT_NONE',
+						'hint_string' : '',
+						'is_static' : item.is_static_method()
+						}
 			
 			for macro in macros:
+				if macro.spelling.startswith('GEXPORT_'):
+					properties |= {
+						'hint' : 'PROPERTY_HINT_' + macro.spelling[8:],
+						'hint_string' : ''.join([i.spelling for i in macro.get_tokens()][2:-1])
+						}
+					continue
+
 				match macro.spelling:
 					case 'GMETHOD':
 						pass
@@ -178,7 +180,12 @@ def extract_methods_and_fields(translation_unit):
 						# Workaround
 						tokens = [i.spelling for i in item.get_tokens()]
 						type = ''.join(tokens[:tokens.index(item.spelling)])
-						class_defs['properties'].append([type, name] + args)
+						properties |= {
+								'name' : name,
+								'type' : type,
+								'setter' : args[0],
+								'getter' : args[1]
+								}
 
 					case 'GGROUP':
 						group[0] = ' '.join([i.spelling for i in macro.get_tokens()][2:-1])
@@ -198,14 +205,21 @@ def extract_methods_and_fields(translation_unit):
 						if item.type.spelling[-1] == ')':
 							raise Exception(f'Bitfield must be named enum <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
 
-						print('------- BITFIELD---------')
 						enum_type = 'bitfields'
 
-			if item.kind == clang.cindex.CursorKind.ENUM_DECL:
-				if item.type.spelling[-1] != ')':
-					class_defs[enum_type][item.type.spelling] = enums
-				else:
-					class_defs['constants'] = enums
+			match item.kind:
+				case clang.cindex.CursorKind.CXX_METHOD:
+					class_defs['methods'].append(properties)
+
+				case clang.cindex.CursorKind.ENUM_DECL:
+					if item.type.spelling[-1] != ')':
+						class_defs[enum_type][item.type.spelling] = properties
+					else:
+						class_defs['constants'] = properties
+
+				case clang.cindex.CursorKind.FIELD_DECL:
+					if properties['name'] != '':
+						class_defs['properties'].append(properties)
 
 			return item
 
@@ -224,18 +238,16 @@ def parse_cpp_file(filename):
 		print("Error: Failed to parse the translation unit!")
 		return
 
-	#return extract_methods_and_fields(translation_unit)
 	data = extract_methods_and_fields(translation_unit)
 	return data
 
-def generate_register_header(target, source, env):
+def generate_register_header():
 	defs = {}
 	for s in scripts:
 		defs |= parse_cpp_file(s)
 
 	
 	print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
-	#print('-------------- GENERATING HEADER ---------------')
 	"""	class_defs = {
 			'base' : bases_temp[cursor.spelling],
 			'methods' : [],
@@ -249,7 +261,7 @@ def generate_register_header(target, source, env):
 	header = ''
 	# Generate include headers
 	for file in scripts:
-		#TEMP FIX of <src/****>
+		#TEMPORARY FIX of <src/****>
 		header += f'#include "{file[4:]}"\n'
 	
 	header += '\nusing namespace godot;\n\n'
@@ -272,15 +284,14 @@ def generate_register_header(target, source, env):
 
 		for method in content['methods']:
 			#TODO: refer to "Generate _bind_methods"
-			args = ''.join([f', "{m[1]}"' if m[1] != '' else '' for m in method['args']])
+			args = ''.join([f', "{m[1]}"' if argname != '' else '' for argtype, argname in method['args']])
 			if method['is_static']:
 				bind += f'	ClassDB::bind_static_method("{class_name}", D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
 			else:
 				bind += f'	ClassDB::bind_method(D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
 
 		for prop in content['properties']:
-			type, name, setter, getter = prop
-			bind += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"), "{setter}", "{getter}");\n'
+			bind += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{prop["type"]}>::VARIANT_TYPE, "{prop["name"]}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");\n'
 
 		for enum, consts in content['enum_constants'].items():
 			#outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
@@ -304,23 +315,20 @@ def generate_register_header(target, source, env):
 		header += bind
 
 	#print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
-	with open(CPPPATH + 'scripts.gen.h', 'w') as file:
+	with open(SCRIPTS_PATH + 'scripts.gen.h', 'w') as file:
 		file.write(header)
 	
-	#save_defs(defs)
 
-########### CLANG
 env = SConscript('godot-cpp/SConstruct')
+env.Append(CPPPATH=[SCRIPTS_PATH])
 
-#opts = Variables()
-#opts.Add(BoolVariable("regenerate_bindings", "Regeenrate header", True))
-#opts.Update(env)
-
-env.Append(CPPPATH=[CPPPATH])
+#register_types.cpp must be last one
 sources = Glob("src/*.cpp", exclude=['src/register_types.cpp']) + Glob('src/register_types.cpp')
+
+#parsing only .hpp headers
 scripts = [str(i) for i in Glob("src/*.hpp")]
 
-generate_register_header(None, None, None)
+generate_register_header()
 
 library_name = 'libscripts' + env['suffix'] + env['LIBSUFFIX']
 
@@ -337,5 +345,5 @@ else:
         source=sources,
     )
 
-env.Ignore(library, CPPPATH + 'scripts.gen.h')
+env.Ignore(library, SCRIPTS_PATH + 'scripts.gen.h')
 Default(library)
