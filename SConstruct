@@ -1,6 +1,4 @@
-import re
 import clang.cindex
-import json
 
 
 SCRIPTS_PATH = 'src/'
@@ -194,14 +192,12 @@ def extract_methods_and_fields(translation_unit):
 						if group != '':
 							class_defs['groups'].add((group, group.lower().replace(" ", "") + "_"))
 						subgroup = ''
-						print('Groups:', group, subgroup)
 
 					case 'GSUBGROUP':
 						subgroup = ' '.join([i.spelling for i in macro.get_tokens()][2:-1])
 						if subgroup != '':
 							class_defs['subgroups'].add((subgroup, group.lower().replace(" ", "") + "_" + subgroup.lower().replace(" ", "") + "_"))
 
-						print('Groups:', group, subgroup)
 
 					case 'GBITFIELD':
 						if item.kind != clang.cindex.CursorKind.ENUM_DECL:
@@ -224,7 +220,6 @@ def extract_methods_and_fields(translation_unit):
 						class_defs['constants'] = properties
 
 				case clang.cindex.CursorKind.FIELD_DECL:
-					print('FINISH Groups:', group, subgroup)
 					name = ("" if group == "" else group.lower().replace(" ", "") + "_") + ("" if subgroup == "" else subgroup.lower().replace(" ", "") + "_") + item.spelling
 					properties |= {'name': name}
 
