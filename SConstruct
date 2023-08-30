@@ -119,11 +119,13 @@ def extract_methods_and_fields(translation_unit):
 			'bitfields' : {}}
 		child_cursors = []
 		parse_class(cursor, child_cursors)
-		group = ['', '']
+		group, subgroup = '', ''
 		start, end = cursor.extent.start.offset, cursor.extent.end.offset
 		class_macros = sorted([m for m in macros if start < m.extent.start.offset < end] + child_cursors, key=lambda x: x.extent.start.offset)
 
 		def apply_macros(item, macros):
+			nonlocal group
+			nonlocal subgroup
 			properties = None
 			match item.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
@@ -188,15 +190,18 @@ def extract_methods_and_fields(translation_unit):
 								}
 
 					case 'GGROUP':
-						group[0] = ' '.join([i.spelling for i in macro.get_tokens()][2:-1])
-						if group[0] != '':
-							class_defs['groups'].add((group[0], group[0].lower().replace(" ", "") + "_"))
-						group[1] = ''
+						group = ' '.join([i.spelling for i in macro.get_tokens()][2:-1])
+						if group != '':
+							class_defs['groups'].add((group, group.lower().replace(" ", "") + "_"))
+						subgroup = ''
+						print('Groups:', group, subgroup)
 
 					case 'GSUBGROUP':
-						group[1] = ' '.join([i.spelling for i in macro.get_tokens()][2:-1])
-						if group[1] != '':
-							class_defs['subgroups'].add((group[1], group[0].lower().replace(" ", "") + "_" + group[1].lower().replace(" ", "") + "_"))
+						subgroup = ' '.join([i.spelling for i in macro.get_tokens()][2:-1])
+						if subgroup != '':
+							class_defs['subgroups'].add((subgroup, group.lower().replace(" ", "") + "_" + subgroup.lower().replace(" ", "") + "_"))
+
+						print('Groups:', group, subgroup)
 
 					case 'GBITFIELD':
 						if item.kind != clang.cindex.CursorKind.ENUM_DECL:
@@ -219,7 +224,8 @@ def extract_methods_and_fields(translation_unit):
 						class_defs['constants'] = properties
 
 				case clang.cindex.CursorKind.FIELD_DECL:
-					name = ("" if group[0] == "" else group[0].lower().replace(" ", "") + "_") + ("" if group[1] == "" else group[1].lower().replace(" ", "") + "_") + item.spelling
+					print('FINISH Groups:', group, subgroup)
+					name = ("" if group == "" else group.lower().replace(" ", "") + "_") + ("" if subgroup == "" else subgroup.lower().replace(" ", "") + "_") + item.spelling
 					properties |= {'name': name}
 
 					class_defs['properties'].append(properties)
