@@ -127,11 +127,13 @@ def extract_methods_and_fields(translation_unit):
 			properties = None
 			match item.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
-					properties = {
-						'name' : item.spelling,
-						'return' : item.result_type.spelling,
-						'args' : [(arg.type.spelling, arg.spelling) for arg in item.get_arguments()],
-						'is_static' : item.is_static_method()}
+					#TODO: add all reserved methods
+					if item.spelling not in ['_process', '_physics_process']:
+						properties = {
+							'name' : item.spelling,
+							'return' : item.result_type.spelling,
+							'args' : [(arg.type.spelling, arg.spelling) for arg in item.get_arguments()],
+							'is_static' : item.is_static_method()}
 
 				case clang.cindex.CursorKind.ENUM_DECL:
 					properties = []
@@ -176,12 +178,10 @@ def extract_methods_and_fields(translation_unit):
 							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
 
 					
-						name = group[0].lower().replace(" ", "") + "_" + group[1].lower().replace(" ", "") + "_" + item.spelling
 						# Workaround
 						tokens = [i.spelling for i in item.get_tokens()]
 						type = ''.join(tokens[:tokens.index(item.spelling)])
 						properties |= {
-								'name' : name,
 								'type' : type,
 								'setter' : args[0],
 								'getter' : args[1]
@@ -209,7 +209,8 @@ def extract_methods_and_fields(translation_unit):
 
 			match item.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
-					class_defs['methods'].append(properties)
+					if properties != None:
+						class_defs['methods'].append(properties)
 
 				case clang.cindex.CursorKind.ENUM_DECL:
 					if item.type.spelling[-1] != ')':
@@ -218,8 +219,10 @@ def extract_methods_and_fields(translation_unit):
 						class_defs['constants'] = properties
 
 				case clang.cindex.CursorKind.FIELD_DECL:
-					if properties['name'] != '':
-						class_defs['properties'].append(properties)
+					name = ("" if group[0] == "" else group[0].lower().replace(" ", "") + "_") + ("" if group[1] == "" else group[1].lower().replace(" ", "") + "_") + item.spelling
+					properties |= {'name': name}
+
+					class_defs['properties'].append(properties)
 
 			return item
 
@@ -247,7 +250,7 @@ def generate_register_header():
 		defs |= parse_cpp_file(s)
 
 	
-	print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
+	#print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
 	"""	class_defs = {
 			'base' : bases_temp[cursor.spelling],
 			'methods' : [],
@@ -284,7 +287,7 @@ def generate_register_header():
 
 		for method in content['methods']:
 			#TODO: refer to "Generate _bind_methods"
-			args = ''.join([f', "{m[1]}"' if argname != '' else '' for argtype, argname in method['args']])
+			args = ''.join([f', "{argname}"' if argname != '' else '' for argtype, argname in method['args']])
 			if method['is_static']:
 				bind += f'	ClassDB::bind_static_method("{class_name}", D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
 			else:
