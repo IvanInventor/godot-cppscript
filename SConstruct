@@ -298,12 +298,14 @@ def generate_register_header():
 			bind += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{prop["type"]}>::VARIANT_TYPE, "{prop["name"]}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");\n'
 
 		for enum, consts in content['enum_constants'].items():
-			#outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
+			#TODO: generate inside class header
+			outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
 			for const in consts:
 				bind += f'	BIND_ENUM_CONSTANT({const});\n'
 
 		for enum, consts in content['bitfields'].items():
-			#outside_bind += f'VARIANT_BITFIELD_CAST({enum});\n'
+			#TODO: generate inside class header
+			outside_bind += f'VARIANT_BITFIELD_CAST({enum});\n'
 			for const in consts:
 				bind += f'	BIND_BITFIELD_FLAG({const});\n'
 
