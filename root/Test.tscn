@@ -1,9 +1,22 @@
 [gd_scene load_steps=2 format=3 uid="uid://diulcsw40vvbs"]
 
-[ext_resource type="Texture2D" uid="uid://ciwmv4y7xm4bw" path="res://icon.svg" id="1_hxeau"]
+[ext_resource type="Texture2D" uid="uid://cy253stvaqpj7" path="res://icon.svg" id="1_hxeau"]
 
 [node name="Test" type="Node2D"]
 
 [node name="MySprite" type="MySprite" parent="."]
+maingroup_submaingroup_speed = 33.0
+enums_enumtest = 2
+enums_rendertest = 722
 position = Vector2(134, 91)
+rotation = 1081.75
 texture = ExtResource("1_hxeau")
+
+[node name="Reset" type="Button" parent="."]
+offset_left = 280.0
+offset_top = 70.0
+offset_right = 334.0
+offset_bottom = 101.0
+text = "RESET"
+
+[connection signal="pressed" from="Reset" to="MySprite" method="reset_rotation"]
