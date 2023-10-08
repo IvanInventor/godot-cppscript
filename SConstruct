@@ -10,7 +10,7 @@ scripts = []
 #	Generate _bind_methods:
 #		+ Simple bind
 #		+ With args decsription
-#		With DEFVAL
+#		+ With DEFVAL
 #		+ Static methods
 #		With varargs
 #	+- Properties
@@ -83,9 +83,6 @@ def extract_methods_and_fields(translation_unit):
 					case 'GPROPERTY':
 						pass
 					
-
-
-
 		for child in cursor.get_children():
 			parse_cursor(child)
 	
@@ -109,6 +106,7 @@ def extract_methods_and_fields(translation_unit):
 			'base' : base,
 			'methods' : [],
 			'properties' : [],
+			'signals' : [],
 			'groups' : set(),
 			'subgroups' : set(),
 			'enum_constants' : {},
@@ -121,40 +119,9 @@ def extract_methods_and_fields(translation_unit):
 		start, end = cursor.extent.start.offset, cursor.extent.end.offset
 		class_macros = sorted([m for m in macros if start < m.extent.start.offset < end] + child_cursors, key=lambda x: x.extent.start.offset)
 
-		def apply_macros(item, macros):
+		def process_macros(item, macros, properties):
 			nonlocal group
 			nonlocal subgroup
-			properties = None
-			match item.kind:
-				case clang.cindex.CursorKind.CXX_METHOD:
-					#TODO: add all reserved methods
-					if item.spelling not in ['_process', '_physics_process']:
-						properties = {
-							'name' : item.spelling,
-							'return' : item.result_type.spelling,
-							'args' : [(arg.type.spelling, arg.spelling) for arg in item.get_arguments()],
-							'is_static' : item.is_static_method()}
-
-				case clang.cindex.CursorKind.ENUM_DECL:
-					properties = []
-					if item.type.spelling[-1] != ')':
-						enum_type = 'enum_constants'
-
-					for enum in item.get_children():
-						if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
-							properties.append(enum.spelling)
-
-				case clang.cindex.CursorKind.FIELD_DECL:
-					properties = {
-						'name' : '',
-						'type' : '',
-						'setter' : '',
-						'getter' : '',
-						'hint' : 'PROPERTY_HINT_NONE',
-						'hint_string' : '',
-						'is_static' : item.is_static_method()
-						}
-			
 			for macro in macros:
 				if macro.spelling.startswith('GEXPORT_'):
 					properties |= {
@@ -164,9 +131,6 @@ def extract_methods_and_fields(translation_unit):
 					continue
 
 				match macro.spelling:
-					case 'GMETHOD':
-						pass
-
 					case 'GPROPERTY':
 						# fail check here
 						if item.kind != clang.cindex.CursorKind.FIELD_DECL:
@@ -208,18 +172,58 @@ def extract_methods_and_fields(translation_unit):
 
 						enum_type = 'bitfields'
 
+					case 'GSIGNAL':
+						pass
+
+		def apply_macros(item, macros):
+			nonlocal group
+			nonlocal subgroup
+			properties = None
 			match item.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
+					#TODO: add all reserved methods
+					if item.spelling not in ['_process', '_physics_process']:
+						properties = {
+							'name' : item.spelling,
+							'return' : item.result_type.spelling,
+							# Must be a better way of getting default method arguments
+							'args' : [(arg.type.spelling, arg.spelling, ''.join([''.join([token.spelling for token in child.get_tokens()]) for child in arg.get_children()])) for arg in item.get_arguments()],
+							'is_static' : item.is_static_method()}
+
+					print(properties)
+					process_macros(item, macros, properties)
+
 					if properties != None:
 						class_defs['methods'].append(properties)
 
 				case clang.cindex.CursorKind.ENUM_DECL:
+					properties = []
+					if item.type.spelling[-1] != ')':
+						enum_type = 'enum_constants'
+
+					for enum in item.get_children():
+						if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
+							properties.append(enum.spelling)
+
+					process_macros(item, macros, properties)
+
 					if item.type.spelling[-1] != ')':
 						class_defs[enum_type][item.type.spelling] = properties
 					else:
 						class_defs['constants'] = properties
 
 				case clang.cindex.CursorKind.FIELD_DECL:
+					properties = {
+						'name' : '',
+						'type' : '',
+						'setter' : '',
+						'getter' : '',
+						'hint' : 'PROPERTY_HINT_NONE',
+						'hint_string' : '',
+						'is_static' : item.is_static_method()
+						}
+					process_macros(item, macros, properties)
+
 					name = ("" if group == "" else group.lower().replace(" ", "") + "_") + ("" if subgroup == "" else subgroup.lower().replace(" ", "") + "_") + item.spelling
 					properties |= {'name': name}
 
@@ -288,11 +292,10 @@ def generate_register_header():
 
 		for method in content['methods']:
 			#TODO: refer to "Generate _bind_methods"
-			args = ''.join([f', "{argname}"' if argname != '' else '' for argtype, argname in method['args']])
-			if method['is_static']:
-				bind += f'	ClassDB::bind_static_method("{class_name}", D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
-			else:
-				bind += f'	ClassDB::bind_method(D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]});\n'
+			args = ''.join([f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args']])
+			defvals = ''.join([', ' + f'DEFVAL({defval})' for _, _, defval in method['args'] if defval != ''])
+
+			bind += (f'	ClassDB::bind_static_method("{class_name}", ' if method['is_static'] else '	ClassDB::bind_method(') + f'D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
 
 		for prop in content['properties']:
 			bind += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{prop["type"]}>::VARIANT_TYPE, "{prop["name"]}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");\n'
