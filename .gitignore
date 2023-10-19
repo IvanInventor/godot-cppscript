@@ -4,8 +4,8 @@
 *.o
 
 # Script headers
-*.hpp
 *scripts.gen.h
 
 # Scons specific
 *.sconsign.dblite
+
