@@ -31,6 +31,12 @@ KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIE
 scripts = []
 
 # Helpers
+def generate_header(target, source, env):
+	csb = CppScriptBuilder(env, 'src/', [str(i) for i in source])
+	#TODO: cache generated definitions
+	csb.generate_register_header()
+
+
 def collapse_list(list, key, action):
 	i, tail = 0, 0
 	while i < len(list):
@@ -47,17 +53,12 @@ class CppScriptBuilder():
 	def __init__(	self,
 	      		env,
 			src='src/',
-			#register_types.cpp must be last one
-			sources = Glob("src/*.cpp", exclude=['src/register_types.cpp']) + Glob('src/register_types.cpp')
+	      		scripts=[]
 			):
 	      self.env = env
 	      self.src = src
-	      self.sources = sources
-	      # parsing only .hpp headers
-	      # TODO: different ext. for script headers(?)/recursive search
-	      self.scripts = [str(i) for i in Glob("src/*.hpp")]
+	      self.scripts = scripts
 
-	      env.Append(CPPPATH=[self.src])
 
 
 	def generate_register_header(self):
@@ -231,7 +232,6 @@ class CppScriptBuilder():
 								'args' : [(arg.type.spelling, arg.spelling, ''.join([''.join([token.spelling for token in child.get_tokens()]) for child in arg.get_children()])) for arg in item.get_arguments()],
 								'is_static' : item.is_static_method()}
 
-						print(properties)
 						process_macros(item, macros, properties)
 
 						if properties != None:
@@ -294,9 +294,8 @@ class CppScriptBuilder():
 				"""
 		header = ''
 		# Generate include headers
-		for file in scripts:
-			#TEMPORARY FIX of <src/****>
-			header += f'#include "{file[4:]}"\n'
+		for file in self.scripts:
+			header += f'#include "{os.path.relpath(file, self.src)}"\n'
 		
 		header += '\nusing namespace godot;\n\n'
 		# Generate register_classes function
