@@ -19,7 +19,7 @@ import os, re
 #	+ Constants
 #	+ Enums
 #		Outside of class
-#	Bitfields
+#	+ Bitfields
 #
 #	Constants w/o class
 #	Enums w/o class
@@ -153,8 +153,7 @@ class CppScriptBuilder():
 				'groups' : set(),
 				'subgroups' : set(),
 				'enum_constants' : {},
-				'enum_unnamed' : set(),
-				'constants' : set(),
+				'constants' : [],
 				'bitfields' : {}}
 			child_cursors = []
 			parse_class(cursor, child_cursors)
@@ -169,7 +168,8 @@ class CppScriptBuilder():
 					if macro.spelling.startswith('GEXPORT_'):
 						properties |= {
 							'hint' : 'PROPERTY_HINT_' + macro.spelling[8:],
-							'hint_string' : ''.join([i.spelling for i in macro.get_tokens()][2:-1])
+							# (len(macro.spelling) + 1, -1) - offsets to get body of GEXPORT_***(***) macro
+							'hint_string' : str_from_file(macro.extent.start.file.name, macro.extent.start.offset + len(macro.spelling) + 1, macro.extent.end.offset - 1)
 							}
 						continue
 
@@ -210,10 +210,11 @@ class CppScriptBuilder():
 							if item.kind != clang.cindex.CursorKind.ENUM_DECL:
 								raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
 
+							# Maybe unneeded
 							if item.type.spelling[-1] == ')':
 								raise Exception(f'Bitfield must be named enum <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
 
-							enum_type = 'bitfields'
+							properties['enum_type'] = 'bitfields'
 
 						case 'GSIGNAL':
 							#(8, -1) - offsets to get body or macro GSIGNAL(*****)
@@ -250,20 +251,15 @@ class CppScriptBuilder():
 							class_defs['methods'].append(properties)
 
 					case clang.cindex.CursorKind.ENUM_DECL:
-						properties = []
-						if item.type.spelling[-1] != ')':
-							enum_type = 'enum_constants'
-
-						for enum in item.get_children():
-							if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL:
-								properties.append(enum.spelling)
+						properties = {'enum_type' : 'enum_constants'}
+						properties['list'] = [enum.spelling for enum in item.get_children() if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL]
 
 						process_macros(item, macros, properties)
 
-						if item.type.spelling[-1] != ')':
-							class_defs[enum_type][item.type.spelling] = properties
+						if item.type.spelling[-1] != ')':	# check for unnamed enum
+							class_defs[properties['enum_type']][item.type.spelling] = properties['list']
 						else:
-							class_defs['constants'] = properties
+							class_defs['constants'] += properties['list']
 
 					case clang.cindex.CursorKind.FIELD_DECL:
 						properties = {
@@ -294,16 +290,19 @@ class CppScriptBuilder():
 
 	def write_register_header(self, defs):		
 		#print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
-		"""	class_defs = {
-				'base' : '***',
+		"""
+		class_defs = {
+				'base' : base,
 				'methods' : [],
 				'properties' : [],
+				'signals' : [],
 				'groups' : set(),
 				'subgroups' : set(),
-				'enum_constants' : set(),
-				'constants' : set()
-				}
-				"""
+				'enum_constants' : {},
+				'constants' : [],
+				'bitfields' : {}}
+		"""
+
 		header = ''
 		# Generate include headers
 		for file in self.scripts:
@@ -312,7 +311,7 @@ class CppScriptBuilder():
 		header += '\nusing namespace godot;\n\n'
 		# Generate register_classes function
 		register_classes_str = 'inline void register_script_classes() {\n'
-		register_classes_str += ''.join([f"	ClassDB::register_class<{i}>();\n" for i in defs.keys()])
+		register_classes_str += ''.join([f"	GDREGISTER_CLASS({i});\n" for i in defs.keys()])
 		register_classes_str += '}\n'
 		header += register_classes_str
 		# Generate _bind_methods for each class
@@ -324,8 +323,12 @@ class CppScriptBuilder():
 			for group, name in content['groups']:
 				bind += f'	ADD_GROUP("{group}", "{name}");\n'
 
+			bind += '\n'
+
 			for group, name in content['subgroups']:
 				bind += f'	ADD_SUBGROUP("{group}", "{name}");\n'
+
+			bind += '\n'
 
 			for method in content['methods']:
 				#TODO: refer to "Generate _bind_methods"
@@ -334,12 +337,19 @@ class CppScriptBuilder():
 
 				bind += (f'	ClassDB::bind_static_method("{class_name}", ' if method['is_static'] else '	ClassDB::bind_method(') + f'D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
 
+
+			bind += '\n'
+
 			for prop in content['properties']:
 				bind += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{prop["type"]}>::VARIANT_TYPE, "{prop["name"]}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");\n'
+
+			bind += '\n'
 
 			for signal_name, args in content['signals']:
 				args_str = ''.join([f', PropertyInfo(GetTypeInfo<{arg_type if arg_type != "" else "Variant"}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args])
 				bind += f'	ADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));\n'
+
+			bind += '\n'
 
 			for enum, consts in content['enum_constants'].items():
 				#TODO: generate inside class header
@@ -347,14 +357,15 @@ class CppScriptBuilder():
 				for const in consts:
 					bind += f'	BIND_ENUM_CONSTANT({const});\n'
 
+			bind += '\n'
+
 			for enum, consts in content['bitfields'].items():
 				#TODO: generate inside class header
 				outside_bind += f'VARIANT_BITFIELD_CAST({enum});\n'
 				for const in consts:
 					bind += f'	BIND_BITFIELD_FLAG({const});\n'
 
-			for const in content['enum_unnamed']:
-				bind += f'	BIND_CONSTANT({const});\n'
+			bind += '\n'
 
 			for const in content['constants']:
 				bind += f'	BIND_CONSTANT({const});\n'
