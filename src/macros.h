@@ -6,6 +6,14 @@
 	GDCLASS(CLASS_NAME , CLASS_NAME_INH)			\
 public:								\
 static void _bind_methods();
+#define GVIRTUAL_CLASS(CLASS_NAME, CLASS_NAME_INH) 						\
+	GDCLASS(CLASS_NAME , CLASS_NAME_INH)			\
+public:								\
+static void _bind_methods();
+#define GABSTRACT_CLASS(CLASS_NAME, CLASS_NAME_INH) 						\
+	GDCLASS(CLASS_NAME , CLASS_NAME_INH)			\
+public:								\
+static void _bind_methods();
 
 #define GPROPERTY(...)
 #define GMETHOD(...)

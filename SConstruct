@@ -14,6 +14,7 @@ scripts = Glob("src/*.hpp")
 
 csb = Builder(
     action=generate_header,
+    emitter=generate_header_emitter,
     target='src/scripts.gen.h'
 )
 

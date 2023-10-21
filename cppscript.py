@@ -37,6 +37,9 @@ def generate_header(target, source, env):
 	csb.generate_register_header()
 
 
+def generate_header_emitter(target, source, env):
+	return env.File('src/scripts.gen.h'), source
+
 def collapse_list(list, key, action):
 	i, tail = 0, 0
 	while i < len(list):
@@ -107,10 +110,11 @@ class CppScriptBuilder():
 						if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
 							class_cursors.append(cursor)
 
+		#TODO: better class definition type code
 		def parse_cursor(cursor):
 			match cursor.kind:
 				case clang.cindex.CursorKind.CLASS_DECL:
-					found_classes.append(cursor)
+					found_classes.append((cursor, None))
 
 				case clang.cindex.CursorKind.MACRO_INSTANTIATION:
 					if cursor.spelling in KEYWORDS:
@@ -121,7 +125,11 @@ class CppScriptBuilder():
 						
 					match cursor.spelling:
 						case 'GCLASS':
-							found_classes.append(cursor)
+							found_classes.append((cursor, 'CLASS'))
+						case 'GVIRTUAL_CLASS':
+							found_classes.append((cursor, 'VIRTUAL_CLASS'))
+						case 'GABSTRACT_CLASS':
+							found_classes.append((cursor, 'ABSTRACT_CLASS'))
 
 						case 'GPROPERTY':
 							pass
@@ -132,21 +140,22 @@ class CppScriptBuilder():
 
 		parse_cursor(translation_unit.cursor)
 
-		found_class = sorted(found_classes, key=lambda x: x.extent.start.offset, reverse=True)	
+		found_class = sorted(found_classes, key=lambda x: x[0].extent.start.offset, reverse=True)	
 
 		def add_class(cursor, macros):
 			if len(macros) > 1:
 				raise Exception(f'Incorrect usage of GCLASS at <{macros[1].location.file.name}>:{macros[1].location.line}:{macros[1].location.column}')
 			
 			for macro in macros:
-				classes.append((cursor, ''.join([token.spelling for token in list(macro.get_tokens())[4:-1]]))) # Temporary base name resolution
+				classes.append((cursor[0], ''.join([token.spelling for token in list(macro[0].get_tokens())[4:-1]]), macro[1])) # Temporary base name resolution
 
-		collapse_list(found_class, lambda x: x.kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
+		collapse_list(found_class, lambda x: x[0].kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
 			
 		parsed_classes = {}
-		for cursor, base in classes:
+		for cursor, base, type in classes:
 			class_defs = {
 				'base' : base,
+				'type' : type,
 				'methods' : [],
 				'properties' : [],
 				'signals' : [],
@@ -311,7 +320,7 @@ class CppScriptBuilder():
 		header += '\nusing namespace godot;\n\n'
 		# Generate register_classes function
 		register_classes_str = 'inline void register_script_classes() {\n'
-		register_classes_str += ''.join([f"	GDREGISTER_CLASS({i});\n" for i in defs.keys()])
+		register_classes_str += ''.join([f"	GDREGISTER_{props['type']}({name});\n" for name, props in defs.items()])
 		register_classes_str += '}\n'
 		header += register_classes_str
 		# Generate _bind_methods for each class
