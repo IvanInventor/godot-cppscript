@@ -42,10 +42,8 @@ def collapse_list(list, key, action):
 	while i < len(list):
 		if key(list[i]) == True:
 			action(list[i], list[tail:i])
-			i += 1
-			tail = i
-		else:
-			i += 1
+			tail = i + 1
+		i += 1
 
 # TODO: find a way to get file text from index OR improve current approach
 def str_from_file(filename, start, end):
