@@ -13,6 +13,7 @@ static void _bind_methods();
 #define GSUBGROUP(...)
 #define GCONSTANT(...)
 #define GBITFIELD(...)
+#define GSIGNAL(...)
 
 #define GEXPORT_NONE(...)
 #define GEXPORT_RANGE(...)

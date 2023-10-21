@@ -1,6 +1,6 @@
 from SCons.Script import *
 import clang.cindex
-import os
+import os, re
 
 
 # TODO
@@ -14,7 +14,7 @@ import os
 #		With varargs
 #	+- Properties
 #	+ Group/subgroup of properties
-#	Signals
+#	+ Signals
 #
 #	+ Constants
 #	+ Enums
@@ -27,7 +27,7 @@ import os
 #	RPCs
 
 
-KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIELD']
+KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIELD', 'GSIGNAL']
 scripts = []
 
 # Helpers
@@ -47,6 +47,11 @@ def collapse_list(list, key, action):
 		else:
 			i += 1
 
+# TODO: find a way to get file text from index OR improve current approach
+def str_from_file(filename, start, end):
+	with open(filename, 'r') as file:
+		file.seek(start)
+		return file.read(end - start)
 
 # Builder
 class CppScriptBuilder():
@@ -89,7 +94,6 @@ class CppScriptBuilder():
 		classes = []
 		found_classes = []
 		macros = []
-		bases_temp = {}
 		def parse_class(parent, class_cursors):
 			for cursor in parent.get_children():
 				match cursor.kind:
@@ -120,7 +124,6 @@ class CppScriptBuilder():
 					match cursor.spelling:
 						case 'GCLASS':
 							found_classes.append(cursor)
-							tokens = list(cursor.get_tokens())
 
 						case 'GPROPERTY':
 							pass
@@ -138,7 +141,7 @@ class CppScriptBuilder():
 				raise Exception(f'Incorrect usage of GCLASS at <{macros[1].location.file.name}>:{macros[1].location.line}:{macros[1].location.column}')
 			
 			for macro in macros:
-				classes.append((cursor, list(macro.get_tokens())[4].spelling)) # Temporary base name resolution
+				classes.append((cursor, ''.join([token.spelling for token in list(macro.get_tokens())[4:-1]]))) # Temporary base name resolution
 
 		collapse_list(found_class, lambda x: x.kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
 			
@@ -215,7 +218,18 @@ class CppScriptBuilder():
 							enum_type = 'bitfields'
 
 						case 'GSIGNAL':
-							pass
+							#(8, -1) - offsets to get body or macro GSIGNAL(*****)
+							macro_args = re.split(r',\s*(?![^{}]*\}|[^<>]*>|[^\(\)]*\))', str_from_file(macro.extent.start.file.name, macro.extent.start.offset + 8, macro.extent.end.offset - 1))
+							name = macro_args[0]
+							args = []
+							for arg in macro_args[1:]:
+								idx = arg.rfind(' ')
+								if idx == -1:
+									args.append(('', arg))
+								else:
+									args.append((arg[:idx], arg[idx+1:]))
+								
+							class_defs['signals'].append((name, args))
 
 			def apply_macros(item, macros):
 				nonlocal group
@@ -283,7 +297,7 @@ class CppScriptBuilder():
 	def write_register_header(self, defs):		
 		#print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
 		"""	class_defs = {
-				'base' : bases_temp[cursor.spelling],
+				'base' : '***',
 				'methods' : [],
 				'properties' : [],
 				'groups' : set(),
@@ -324,6 +338,10 @@ class CppScriptBuilder():
 
 			for prop in content['properties']:
 				bind += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{prop["type"]}>::VARIANT_TYPE, "{prop["name"]}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");\n'
+
+			for signal_name, args in content['signals']:
+				args_str = ''.join([f', PropertyInfo(GetTypeInfo<{arg_type if arg_type != "" else "Variant"}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args])
+				bind += f'	ADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));\n'
 
 			for enum, consts in content['enum_constants'].items():
 				#TODO: generate inside class header
