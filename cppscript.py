@@ -5,20 +5,19 @@ import os, re
 
 # TODO
 #	+ Register class
-#	Register abstract class
+#	+ Register abstract/virtual class
 #	Generate _bind_methods:
 #		+ Simple bind
 #		+ With args decsription
 #		+ With DEFVAL
 #		+ Static methods
 #		With varargs
-#	+- Properties
+#	+ Properties
 #	+ Group/subgroup of properties
 #	+ Signals
 #
 #	+ Constants
 #	+ Enums
-#		Outside of class
 #	+ Bitfields
 #
 #	Constants w/o class
@@ -37,7 +36,7 @@ def generate_header(target, source, env):
 
 
 def generate_header_emitter(target, source, env):
-	return env.File('src/scripts.gen.h'), source
+	return env.File(os.path.join(env['src'], 'scripts.gen.h')), source
 
 def collapse_list(list, key, action):
 	i, tail = 0, 0
@@ -290,62 +289,61 @@ def write_register_header(defs, src, target):
 		for class_name, content in classes.items():
 			header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
 
-			bind = f'void {class_name}::_bind_methods() {{\n'
+			bind = ['']
 			outside_bind = ''
 			
 			#Groups/subgroups declarations
 			for group, name in content['groups']:
-				bind += f'	ADD_GROUP("{group}", "{name}");\n'
+				bind.append(f'	ADD_GROUP("{group}", "{name}");')
 
-			bind += '\n'
+			bind.append('') if bind[-1] != '' else None
 
 			for group, name in content['subgroups']:
-				bind += f'	ADD_SUBGROUP("{group}", "{name}");\n'
+				bind.append(f'	ADD_SUBGROUP("{group}", "{name}");')
 
-			bind += '\n'
+			bind.append('') if bind[-1] != '' else None
 
 			for method in content['methods']:
 				#TODO: refer to "Generate _bind_methods"
 				args = ''.join([f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args']])
 				defvals = ''.join([', ' + f'DEFVAL({defval})' for _, _, defval in method['args'] if defval != ''])
 
-				bind += (f'	ClassDB::bind_static_method("{class_name}", ' if method['is_static'] else '	ClassDB::bind_method(') + f'D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
+				bind.append((f'	ClassDB::bind_static_method("{class_name}", ' if method['is_static'] else '	ClassDB::bind_method(') + f'D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]}{defvals});')
 
 
-			bind += '\n'
+			bind.append('') if bind[-1] != '' else None
 
 			for prop in content['properties']:
-				bind += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{prop["type"]}>::VARIANT_TYPE, "{prop["name"]}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");\n'
+				bind.append(f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{prop["type"]}>::VARIANT_TYPE, "{prop["name"]}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");')
 
-			bind += '\n'
+			bind.append('') if bind[-1] != '' else None
 
 			for signal_name, args in content['signals']:
 				args_str = ''.join([f', PropertyInfo(GetTypeInfo<{arg_type if arg_type != "" else "Variant"}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args])
-				bind += f'	ADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));\n'
+				bind.append(f'	ADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));')
 
-			bind += '\n'
+			bind.append('') if bind[-1] != '' else None
 
 			for enum, consts in content['enum_constants'].items():
 				#TODO: generate inside class header
-				outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
+				outside_bind += f'VARIANT_ENUM_CAST({enum});'
 				for const in consts:
-					bind += f'	BIND_ENUM_CONSTANT({const});\n'
+					bind.append(f'	BIND_ENUM_CONSTANT({const});')
 
-			bind += '\n'
+			bind.append('') if bind[-1] != '' else None
 
 			for enum, consts in content['bitfields'].items():
 				#TODO: generate inside class header
-				outside_bind += f'VARIANT_BITFIELD_CAST({enum});\n'
+				outside_bind += f'VARIANT_BITFIELD_CAST({enum});'
 				for const in consts:
-					bind += f'	BIND_BITFIELD_FLAG({const});\n'
+					bind.append(f'	BIND_BITFIELD_FLAG({const});')
 
-			bind += '\n'
+			bind.append('') if bind[-1] != '' else None
 
 			for const in content['constants']:
-				bind += f'	BIND_CONSTANT({const});\n'
+				bind.append(f'	BIND_CONSTANT({const});\n')
 
-			bind += '};\n'
-			bind += outside_bind + '\n'
+			bind = f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind)[1:] + '};\n' + outside_bind + '\n'
 
 			header_binds += bind
 
