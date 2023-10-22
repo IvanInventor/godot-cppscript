@@ -5,6 +5,7 @@ from cppscript import * #CppScriptBuilder
 env = SConscript('godot-cpp/SConstruct')
 
 env.Append(CPPPATH=['src/'])
+env['src'] = 'src'
 
 sources = Glob("src/*.cpp")
 
