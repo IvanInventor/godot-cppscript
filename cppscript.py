@@ -52,6 +52,15 @@ def str_from_file(filename, start, end):
 		file.seek(start)
 		return file.read(end - start)
 
+
+def get_macro_body(macro):
+	return str_from_file(macro.extent.start.file.name, macro.extent.start.offset + len(macro.spelling) + 1, macro.extent.end.offset - 1)
+
+
+MACRO_ARGS_REGEX = r',\s*(?![^{}]*\}|[^<>]*>|[^\(\)]*\))'
+def get_macro_args(macro):
+	return re.split(MACRO_ARGS_REGEX, get_macro_body(macro))
+ 
 # Builder
 def generate_register_header(env, scripts, target):
 	defs = parse_definitions(scripts, env['src'])
@@ -126,7 +135,7 @@ def extract_methods_and_fields(translation_unit):
 			raise Exception(f'Incorrect usage of GCLASS at <{macros[1].location.file.name}>:{macros[1].location.line}:{macros[1].location.column}')
 		
 		for macro in macros:
-			classes.append((cursor, ''.join([token.spelling for token in list(macro.get_tokens())[4:-1]]), macro.spelling[1:])) # Temporary base name resolution
+			classes.append((cursor, get_macro_args(macro)[1], macro.spelling[1:])) # Temporary base name resolution
 
 	collapse_list(found_class, lambda x: x.kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
 		
@@ -157,7 +166,7 @@ def extract_methods_and_fields(translation_unit):
 					properties |= {
 						'hint' : 'PROPERTY_HINT_' + macro.spelling[8:],
 						# (len(macro.spelling) + 1, -1) - offsets to get body of GEXPORT_***(***) macro
-						'hint_string' : str_from_file(macro.extent.start.file.name, macro.extent.start.offset + len(macro.spelling) + 1, macro.extent.end.offset - 1)
+						'hint_string' : get_macro_body(macro)
 						}
 					continue
 
@@ -168,14 +177,11 @@ def extract_methods_and_fields(translation_unit):
 							#TODO line:column error
 							raise Exception(f'Incorrect macro usage at {macro.location.line}:{macro.location.column}')
 
-						args = ''.join([i.spelling for i in macro.get_tokens()][2:-1]).split(',')
+						args = get_macro_args(macro)
 						if len(args) != 2:
 							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
-
 					
-						# Workaround
-						tokens = [i.spelling for i in item.get_tokens()]
-						type = ''.join(tokens[:tokens.index(item.spelling)])
+						type = item.type.spelling
 						properties |= {
 								'type' : type,
 								'setter' : args[0],
@@ -183,13 +189,13 @@ def extract_methods_and_fields(translation_unit):
 								}
 
 					case 'GGROUP':
-						group = ' '.join([i.spelling for i in macro.get_tokens()][2:-1])
+						group = get_macro_body(macro)
 						if group != '':
 							class_defs['groups'].add((group, group.lower().replace(" ", "") + "_"))
 						subgroup = ''
 
 					case 'GSUBGROUP':
-						subgroup = ' '.join([i.spelling for i in macro.get_tokens()][2:-1])
+						subgroup = get_macro_body(macro)
 						if subgroup != '':
 							class_defs['subgroups'].add((subgroup, group.lower().replace(" ", "") + "_" + subgroup.lower().replace(" ", "") + "_"))
 
@@ -205,8 +211,7 @@ def extract_methods_and_fields(translation_unit):
 						properties['enum_type'] = 'bitfields'
 
 					case 'GSIGNAL':
-						#(8, -1) - offsets to get body or macro GSIGNAL(*****)
-						macro_args = re.split(r',\s*(?![^{}]*\}|[^<>]*>|[^\(\)]*\))', str_from_file(macro.extent.start.file.name, macro.extent.start.offset + 8, macro.extent.end.offset - 1))
+						macro_args = get_macro_args(macro)
 						name = macro_args[0]
 						args = []
 						for arg in macro_args[1:]:
@@ -326,7 +331,7 @@ def write_register_header(defs, src, target):
 
 			for enum, consts in content['enum_constants'].items():
 				#TODO: generate inside class header
-				outside_bind += f'VARIANT_ENUM_CAST({enum});'
+				outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
 				for const in consts:
 					bind.append(f'	BIND_ENUM_CONSTANT({const});')
 
@@ -334,7 +339,7 @@ def write_register_header(defs, src, target):
 
 			for enum, consts in content['bitfields'].items():
 				#TODO: generate inside class header
-				outside_bind += f'VARIANT_BITFIELD_CAST({enum});'
+				outside_bind += f'VARIANT_BITFIELD_CAST({enum});\n'
 				for const in consts:
 					bind.append(f'	BIND_BITFIELD_FLAG({const});')
 
@@ -348,7 +353,7 @@ def write_register_header(defs, src, target):
 			header_binds += bind
 
 	header += '\nusing namespace godot;\n\n'
-	header += header_register + '}\n'
+	header += header_register + '}\n\n'
 	header += header_binds
 
 	with open(target, 'w') as file:
