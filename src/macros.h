@@ -5,15 +5,10 @@
 #define GCLASS(CLASS_NAME, CLASS_NAME_INH) 						\
 	GDCLASS(CLASS_NAME , CLASS_NAME_INH)			\
 public:								\
-static void _bind_methods();
-#define GVIRTUAL_CLASS(CLASS_NAME, CLASS_NAME_INH) 						\
-	GDCLASS(CLASS_NAME , CLASS_NAME_INH)			\
-public:								\
-static void _bind_methods();
-#define GABSTRACT_CLASS(CLASS_NAME, CLASS_NAME_INH) 						\
-	GDCLASS(CLASS_NAME , CLASS_NAME_INH)			\
-public:								\
-static void _bind_methods();
+static void _bind_methods();					\
+void _rpc_config();
+#define GVIRTUAL_CLASS(CLASS_NAME, CLASS_NAME_INH) GCLASS(CLASS_NAME, CLASS_NAME_INH)
+#define GABSTRACT_CLASS(CLASS_NAME, CLASS_NAME_INH) GCLASS(CLASS_NAME, CLASS_NAME_INH)
 
 #define GPROPERTY(...)
 #define GMETHOD(...)
@@ -22,6 +17,7 @@ static void _bind_methods();
 #define GCONSTANT(...)
 #define GBITFIELD(...)
 #define GSIGNAL(...)
+#define GRPC(...)
 
 #define GEXPORT_NONE(...)
 #define GEXPORT_RANGE(...)

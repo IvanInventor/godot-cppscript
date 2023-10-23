@@ -3,6 +3,8 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
+#include <godot_cpp/classes/multiplayer_peer.hpp>
+#include <godot_cpp/classes/multiplayer_api.hpp>
 
 #include <scripts.gen.h>
 #include "register_types.h"

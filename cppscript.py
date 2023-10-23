@@ -23,10 +23,10 @@ import os, re
 #	Constants w/o class
 #	Enums w/o class
 #	
-#	RPCs
+#	+ RPCs
 
 
-KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIELD', 'GSIGNAL']
+KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIELD', 'GSIGNAL', 'GRPC']
 scripts = []
 
 # Helpers
@@ -46,6 +46,9 @@ def collapse_list(list, key, action):
 			tail = i + 1
 		i += 1
 
+def Raise(e):
+	raise e
+
 # TODO: find a way to get file text from index OR improve current approach
 def str_from_file(filename, start, end):
 	with open(filename, 'r') as file:
@@ -59,7 +62,8 @@ def get_macro_body(macro):
 
 MACRO_ARGS_REGEX = r',\s*(?![^{}]*\}|[^<>]*>|[^\(\)]*\))'
 def get_macro_args(macro):
-	return re.split(MACRO_ARGS_REGEX, get_macro_body(macro))
+	array = [ i.strip() for i in re.split(MACRO_ARGS_REGEX, get_macro_body(macro))]
+	return array if array != [''] else []
  
 # Builder
 def generate_register_header(env, scripts, target):
@@ -151,7 +155,8 @@ def extract_methods_and_fields(translation_unit):
 			'subgroups' : set(),
 			'enum_constants' : {},
 			'constants' : [],
-			'bitfields' : {}}
+			'bitfields' : {}
+			}
 		child_cursors = []
 		parse_class(cursor, child_cursors)
 		group, subgroup = '', ''
@@ -223,6 +228,44 @@ def extract_methods_and_fields(translation_unit):
 							
 						class_defs['signals'].append((name, args))
 
+					case 'GRPC':
+						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
+							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column} (GRPC only usable with methods)')
+
+						macro_args = get_macro_args(macro)
+						rpc_mode, transfer_mode, call_local, channel = None, None, None, None
+
+						if len(macro_args) != 0 and macro_args[-1].isnumeric():
+							if len(macro_args) < 3:
+								raise Exception(f'Channel id must come with explicit rpc_mode and transfer_mode (at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column})')
+
+							parse_args = macro_args[:-1]
+							channel = macro_args[-1]
+						else:
+							parse_args = macro_args
+
+						for arg in macro_args:
+							match arg:
+								case ('any_peer' | 'authority') as mode:
+									rpc_mode = mode.upper() if rpc_mode == None else Raise(Exception(f'Duplicate rpc mode keyword usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}'))
+
+								case ('reliable' | 'unreliable' | 'unreliable_ordered') as mode:
+									transfer_mode = mode.upper() if transfer_mode == None else Raise(Exception(f'Duplicate transfer mode keyword usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}'))
+
+								case ('call_local' | 'call_remote') as mode:
+									mode = 'true' if mode == 'call_local' else 'false'
+									call_local = mode if call_local == None else Raise(Exception(f'Duplicate call_local keyword usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}'))
+
+						rpc_config = {	'rpc_mode' : 'RPC_MODE_' + rpc_mode if rpc_mode != None else 'RPC_MODE_AUTHORITY',
+								'transfer_mode' : 'TRANSFER_MODE_' + transfer_mode if transfer_mode != None else 'TRANSFER_MODE_UNRELIABLE',
+		    						'call_local' : call_local if call_local != None else 'false',
+		    						'channel' : channel if channel != None else '0'}
+						
+						properties['rpc_config'] = rpc_config 
+
+
+
+
 		def apply_macros(item, macros):
 			nonlocal group
 			nonlocal subgroup
@@ -236,7 +279,9 @@ def extract_methods_and_fields(translation_unit):
 							'return' : item.result_type.spelling,
 							# Must be a better way of getting default method arguments
 							'args' : [(arg.type.spelling, arg.spelling, ''.join([''.join([token.spelling for token in child.get_tokens()]) for child in arg.get_children()])) for arg in item.get_arguments()],
-							'is_static' : item.is_static_method()}
+							'is_static' : item.is_static_method(),
+							'rpc_config' : None
+							}
 
 					process_macros(item, macros, properties)
 
@@ -282,6 +327,7 @@ def extract_methods_and_fields(translation_unit):
 
 
 def write_register_header(defs, src, target):		
+	#import json
 	#print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
 	
 	header = ''
@@ -293,7 +339,7 @@ def write_register_header(defs, src, target):
 	
 		for class_name, content in classes.items():
 			header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
-
+			header_rpc_config = f'void {class_name}::_rpc_config() {{\n'
 			bind = ['']
 			outside_bind = ''
 			
@@ -314,6 +360,18 @@ def write_register_header(defs, src, target):
 				defvals = ''.join([', ' + f'DEFVAL({defval})' for _, _, defval in method['args'] if defval != ''])
 
 				bind.append((f'	ClassDB::bind_static_method("{class_name}", ' if method['is_static'] else '	ClassDB::bind_method(') + f'D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]}{defvals});')
+
+				if method['rpc_config'] != None:
+					header_rpc_config += f"""	{{
+		Dictionary opts;
+		opts["rpc_mode"] = MultiplayerAPI::{method['rpc_config']['rpc_mode']};
+		opts["transfer_mode"] = MultiplayerPeer::{method['rpc_config']['transfer_mode']};
+		opts["call_local"] = {method['rpc_config']['call_local']};
+		opts["channel"] = {method['rpc_config']['channel']};
+		rpc_config("{method["name"]}", opts);
+	}}
+"""
+
 
 
 			bind.append('') if bind[-1] != '' else None
@@ -348,7 +406,8 @@ def write_register_header(defs, src, target):
 			for const in content['constants']:
 				bind.append(f'	BIND_CONSTANT({const});\n')
 
-			bind = f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind)[1:] + '};\n' + outside_bind + '\n'
+			header_rpc_config += '}\n'
+			bind = f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind)[1:] + '};\n' + header_rpc_config + outside_bind + '\n'
 
 			header_binds += bind
 
