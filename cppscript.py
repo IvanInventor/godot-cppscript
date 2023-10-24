@@ -3,30 +3,9 @@ import clang.cindex
 import os, re
 
 
-# TODO
-#	+ Register class
-#	+ Register abstract/virtual class
-#	Generate _bind_methods:
-#		+ Simple bind
-#		+ With args decsription
-#		+ With DEFVAL
-#		+ Static methods
-#		With varargs
-#	+ Properties
-#	+ Group/subgroup of properties
-#	+ Signals
-#
-#	+ Constants
-#	+ Enums
-#	+ Bitfields
-#
-#	Constants w/o class
-#	Enums w/o class
-#	
-#	+ RPCs
-
 
 KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIELD', 'GSIGNAL', 'GRPC']
+VIRTUAL_METHODS = ['_enter_tree', '_exit_tree', '_input', '_unhandled_input', '_unhandled_key_input', '_process', '_physics_process']
 scripts = []
 
 # Helpers
@@ -272,8 +251,7 @@ def extract_methods_and_fields(translation_unit):
 			properties = None
 			match item.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
-					#TODO: add all reserved methods
-					if item.spelling not in ['_process', '_physics_process']:
+					if item.spelling not in VIRTUAL_METHODS:
 						properties = {
 							'name' : item.spelling,
 							'return' : item.result_type.spelling,
@@ -294,7 +272,7 @@ def extract_methods_and_fields(translation_unit):
 
 					process_macros(item, macros, properties)
 
-					if item.type.spelling[-1] != ')':	# check for unnamed enum
+					if item.type.spelling[-1] != ')':	# check for named enum
 						class_defs[properties['enum_type']][item.type.spelling] = properties['list']
 					else:
 						class_defs['constants'] += properties['list']
@@ -320,7 +298,6 @@ def extract_methods_and_fields(translation_unit):
 
 						
 		collapse_list(class_macros, lambda x: x.kind != clang.cindex.CursorKind.MACRO_INSTANTIATION, apply_macros)
-		#print(json.dumps(class_defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
 		parsed_classes[cursor.spelling] = class_defs
 
 	return parsed_classes
@@ -335,8 +312,10 @@ def write_register_header(defs, src, target):
 	header_binds = ''
 
 	for file, classes in defs.items():
+		if len(classes) == 0:
+			continue
+		
 		header += f'#include "{os.path.relpath(file, src)}"\n'
-	
 		for class_name, content in classes.items():
 			header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
 			header_rpc_config = f'void {class_name}::_rpc_config() {{\n'
@@ -349,15 +328,14 @@ def write_register_header(defs, src, target):
 
 			bind.append('') if bind[-1] != '' else None
 
-			for group, name in content['subgroups']:
-				bind.append(f'	ADD_SUBGROUP("{group}", "{name}");')
+			for subgroup, name in content['subgroups']:
+				bind.append(f'	ADD_SUBGROUP("{subgroup}", "{name}");')
 
 			bind.append('') if bind[-1] != '' else None
 
 			for method in content['methods']:
-				#TODO: refer to "Generate _bind_methods"
 				args = ''.join([f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args']])
-				defvals = ''.join([', ' + f'DEFVAL({defval})' for _, _, defval in method['args'] if defval != ''])
+				defvals = ''.join([f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != ''])
 
 				bind.append((f'	ClassDB::bind_static_method("{class_name}", ' if method['is_static'] else '	ClassDB::bind_method(') + f'D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]}{defvals});')
 
