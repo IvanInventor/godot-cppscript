@@ -15,7 +15,7 @@ def generate_header(target, source, env):
 
 
 def generate_header_emitter(target, source, env):
-	return env.File(os.path.join(env['src'], 'scripts.gen.h')), source
+	return env.File('src/scripts.gen.h'), source
 
 def collapse_list(list, key, action):
 	i, tail = 0, 0
@@ -315,7 +315,7 @@ def write_register_header(defs, src, target):
 		if len(classes) == 0:
 			continue
 		
-		header += f'#include "{os.path.relpath(file, src)}"\n'
+		header += f'#include <{os.path.relpath(file, src)}>\n'
 		for class_name, content in classes.items():
 			header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
 			header_rpc_config = f'void {class_name}::_rpc_config() {{\n'

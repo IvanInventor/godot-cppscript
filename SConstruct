@@ -1,17 +1,18 @@
-from cppscript import * #CppScriptBuilder
+from cppscript import *
+import os
 
-
+SRC_DIR = '../src'
 
 env = SConscript('godot-cpp/SConstruct')
 
-env.Append(CPPPATH=['src/'])
-env['src'] = 'src'
+env.Append(CPPPATH=['src/', SRC_DIR])
+env['src'] = SRC_DIR
 
-sources = Glob("src/*.cpp")
+sources = Glob(os.path.join(SRC_DIR, '*.cpp')) + Glob('src/register_types.cpp')
 
 # parsing only .hpp headers
 # TODO: different ext. for script headers(?)/recursive search
-scripts = Glob("src/*.hpp")
+scripts = Glob(os.path.join(SRC_DIR, '*.hpp'))
 
 csb = Builder(
     action=generate_header,
@@ -19,7 +20,6 @@ csb = Builder(
 )
 
 env.Append(BUILDERS={'CppScript' : csb})
-#csb.generate_register_header()
 
 library_name = 'libscripts' + env['suffix'] + env['LIBSUFFIX']
 
