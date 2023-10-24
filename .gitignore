@@ -9,3 +9,10 @@
 
 # Scons specific
 *.sconsign.dblite
+
+# Source files except provided templates
+/src/*
+!/src/register_types.cpp
+!/src/register_types.h
+!/src/cppscript.h
+
