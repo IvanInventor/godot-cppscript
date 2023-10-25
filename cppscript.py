@@ -36,6 +36,14 @@ def get_pair_arglist(args, default_left):
 	return pairs
 
 
+def find_default_arg(arg):
+	for token in arg.get_tokens():
+		if token.spelling == '=':
+			return str_from_file(arg.extent.start.file.name, token.extent.end.offset, arg.extent.end.offset).lstrip()
+
+	return ''
+
+
 def Raise(e):
 	raise e
 
@@ -266,16 +274,16 @@ def extract_methods_and_fields(translation_unit):
 							'name' : item.spelling,
 							'return' : item.result_type.spelling,
 							# Must be a better way of getting default method arguments
-							'args' : [(arg.type.spelling, arg.spelling, ''.join([''.join([token.spelling for token in child.get_tokens()]) for child in arg.get_children()])) for arg in item.get_arguments()],
+							'args' : [(arg.type.spelling, arg.spelling, find_default_arg(arg)) for arg in item.get_arguments()],
 							'is_static' : item.is_static_method(),
 							'is_vararg': False,
 							'rpc_config' : None
 							}
 
-					process_macros(item, macros, properties)
+						process_macros(item, macros, properties)
 
-					if properties != None:
-						class_defs['methods'].append(properties)
+						if properties != None:
+							class_defs['methods'].append(properties)
 
 				case clang.cindex.CursorKind.ENUM_DECL:
 					properties = {'enum_type' : 'enum_constants'}
@@ -315,8 +323,8 @@ def extract_methods_and_fields(translation_unit):
 
 
 def write_register_header(defs, src, target):		
-	import json
-	print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
+	#import json
+	#print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
 	
 	header = ''
 	header_register = 'inline void register_script_classes() {\n'
