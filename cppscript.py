@@ -101,8 +101,7 @@ def extract_methods_and_fields(translation_unit):
 						class_cursors.append(cursor)
 					
 				case clang.cindex.CursorKind.FIELD_DECL:
-					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
-						class_cursors.append(cursor)
+					class_cursors.append(cursor)
 								
 				case clang.cindex.CursorKind.ENUM_DECL:
 					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
@@ -269,7 +268,7 @@ def extract_methods_and_fields(translation_unit):
 			properties = None
 			match item.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
-					if item.spelling not in VIRTUAL_METHODS:
+					if item.spelling not in VIRTUAL_METHODS and not item.is_virtual_method(): # Do not register virtual temporary
 						properties = {
 							'name' : item.spelling,
 							'return' : item.result_type.spelling,
