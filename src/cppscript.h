@@ -18,6 +18,7 @@ void _rpc_config();
 #define GBITFIELD(...)
 #define GSIGNAL(...)
 #define GRPC(...)
+#define GVARARG(...)
 
 #define GEXPORT_NONE(...)
 #define GEXPORT_RANGE(...)

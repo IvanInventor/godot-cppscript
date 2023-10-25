@@ -4,7 +4,7 @@ import os, re
 
 
 
-KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIELD', 'GSIGNAL', 'GRPC']
+KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG']
 VIRTUAL_METHODS = ['_enter_tree', '_exit_tree', '_input', '_unhandled_input', '_unhandled_key_input', '_process', '_physics_process']
 scripts = []
 
@@ -24,6 +24,17 @@ def collapse_list(list, key, action):
 			action(list[i], list[tail:i])
 			tail = i + 1
 		i += 1
+
+def get_pair_arglist(args, default_left):
+	pairs = []
+	for arg in args:
+		idx = arg.rfind(' ')
+		if idx == -1:
+			pairs.append((default_left, arg))
+		else:
+			pairs.append((arg[:idx], arg[idx+1:]))
+	return pairs
+
 
 def Raise(e):
 	raise e
@@ -60,7 +71,7 @@ def parse_definitions(scripts, src):
 
 def parse_header(filename, src):
 	index = clang.cindex.Index.create()
-	translation_unit = index.parse(filename, args=[f'-I{src}'], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+	translation_unit = index.parse(filename, args=['-Isrc', f'-I{src}'], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
 		raise Exception("Error: Failed to parse the translation unit!")
@@ -198,14 +209,7 @@ def extract_methods_and_fields(translation_unit):
 					case 'GSIGNAL':
 						macro_args = get_macro_args(macro)
 						name = macro_args[0]
-						args = []
-						for arg in macro_args[1:]:
-							idx = arg.rfind(' ')
-							if idx == -1:
-								args.append(('', arg))
-							else:
-								args.append((arg[:idx], arg[idx+1:]))
-							
+						args = get_pair_arglist(macro_args[1:], '')
 						class_defs['signals'].append((name, args))
 
 					case 'GRPC':
@@ -243,6 +247,11 @@ def extract_methods_and_fields(translation_unit):
 						
 						properties['rpc_config'] = rpc_config 
 
+					case 'GVARARG':
+						varargs = get_pair_arglist(get_macro_args(macro), 'Variant')
+						properties['is_vararg'] = True
+						properties['args'] = varargs
+
 
 
 
@@ -259,6 +268,7 @@ def extract_methods_and_fields(translation_unit):
 							# Must be a better way of getting default method arguments
 							'args' : [(arg.type.spelling, arg.spelling, ''.join([''.join([token.spelling for token in child.get_tokens()]) for child in arg.get_children()])) for arg in item.get_arguments()],
 							'is_static' : item.is_static_method(),
+							'is_vararg': False,
 							'rpc_config' : None
 							}
 
@@ -305,8 +315,8 @@ def extract_methods_and_fields(translation_unit):
 
 
 def write_register_header(defs, src, target):		
-	#import json
-	#print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
+	import json
+	print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
 	
 	header = ''
 	header_register = 'inline void register_script_classes() {\n'
@@ -335,13 +345,14 @@ def write_register_header(defs, src, target):
 			bind.append('') if bind[-1] != '' else None
 
 			for method in content['methods']:
-				args = ''.join([f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args']])
-				defvals = ''.join([f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != ''])
+				if not method['is_vararg']:
+					args = ''.join([f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args']])
+					defvals = ''.join([f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != ''])
 
-				bind.append((f'	ClassDB::bind_static_method("{class_name}", ' if method['is_static'] else '	ClassDB::bind_method(') + f'D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]}{defvals});')
+					bind.append((f'	ClassDB::bind_static_method("{class_name}", ' if method['is_static'] else '	ClassDB::bind_method(') + f'D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]}{defvals});')
 
-				if method['rpc_config'] != None:
-					header_rpc_config += f"""	{{
+					if method['rpc_config'] != None:
+						header_rpc_config += f"""	{{
 		Dictionary opts;
 		opts["rpc_mode"] = MultiplayerAPI::{method['rpc_config']['rpc_mode']};
 		opts["transfer_mode"] = MultiplayerPeer::{method['rpc_config']['transfer_mode']};
@@ -350,8 +361,17 @@ def write_register_header(defs, src, target):
 		rpc_config("{method["name"]}", opts);
 	}}
 """
+				else:
+					args_list = '\n'.join([f'		mi.arguments.push_back(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"));' for type, name in method['args']])
 
-
+					fmt = f"""	{{
+		MethodInfo mi;
+		mi.name = "{method["name"]}";
+""" + args_list + f"""
+		ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "{method["name"]}", &{class_name}::{method["name"]}, mi);
+	}}
+"""
+					bind.append(fmt)
 
 			bind.append('') if bind[-1] != '' else None
 
