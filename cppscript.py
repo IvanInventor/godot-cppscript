@@ -41,7 +41,7 @@ def get_macro_body(macro):
 
 MACRO_ARGS_REGEX = r',\s*(?![^{}]*\}|[^<>]*>|[^\(\)]*\))'
 def get_macro_args(macro):
-	array = [ i.strip() for i in re.split(MACRO_ARGS_REGEX, get_macro_body(macro))]
+	array = [i.strip() for i in re.split(MACRO_ARGS_REGEX, get_macro_body(macro))]
 	return array if array != [''] else []
  
 # Builder
@@ -118,7 +118,8 @@ def extract_methods_and_fields(translation_unit):
 			raise Exception(f'Incorrect usage of GCLASS at <{macros[1].location.file.name}>:{macros[1].location.line}:{macros[1].location.column}')
 		
 		for macro in macros:
-			classes.append((cursor, get_macro_args(macro)[1], macro.spelling[1:])) # Temporary base name resolution
+			classes.append((cursor, get_macro_args(macro)[1], macro.spelling[1:]))
+
 
 	collapse_list(found_class, lambda x: x.kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
 		

@@ -2,6 +2,7 @@ from cppscript import *
 import os
 
 SRC_DIR = '../src'
+library_name = 'scripts'
 
 env = SConscript('godot-cpp/SConstruct')
 
@@ -21,19 +22,17 @@ csb = Builder(
 
 env.Append(BUILDERS={'CppScript' : csb})
 
-library_name = 'libscripts' + env['suffix'] + env['LIBSUFFIX']
-
 cpp = env.CppScript(scripts)
 if env["platform"] == "macos":
     library = env.SharedLibrary(
-        "bin/libscripts.{}.{}.framework/libgdexample.{}.{}".format(
-            env["platform"], env["target"], env["platform"], env["target"]
+        "../bin/lib{}.{}.{}.framework/lib{}.{}.{}".format(
+            library_name, env["platform"], env["target"], library_name, env["platform"], env["target"]
         ),
         source=sources,
     )
 else:
     library = env.SharedLibrary(
-        "bin/libscripts{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+        "../bin/lib{}.{}{}".format(library_name, env["suffix"], env["SHLIBSUFFIX"]),
         source=sources,
     )
 
