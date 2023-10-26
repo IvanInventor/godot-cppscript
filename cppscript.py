@@ -1,6 +1,6 @@
 from SCons.Script import *
 import clang.cindex
-import os, re
+import os, re, json
 
 
 
@@ -10,8 +10,18 @@ scripts = []
 
 # Helpers
 def generate_header(target, source, env):
-	#TODO: cache generated definitions
-	generate_register_header(env, [str(i) for i in source], str(target[0]))
+	if target[0].changed():
+		cached_sigs = [i.csig for i in target[0].get_stored_info().binfo.bsourcesigs]
+		cached_defs = load_defs_json('defs.json')
+
+		index = clang.cindex.Index.create()
+
+		new_defs = {str(file): cached_defs[str(file)] if file.get_csig() in cached_sigs and str(file) in cached_defs.keys() else parse_header(index, file, env['src']) for file in source}
+
+		write_register_header(new_defs, env['src'], str(target[0]))
+		
+		with open('defs.json', 'w') as file:
+			json.dump(new_defs, file, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
 
 
 def generate_header_emitter(target, source, env):
@@ -36,60 +46,55 @@ def get_pair_arglist(args, default_left):
 	return pairs
 
 
-def find_default_arg(arg):
+def find_default_arg(file, arg):
 	arg_def = str_from_file(arg.extent.start.file.name, arg.extent.start.offset, arg.extent.end.offset)
 	for token in arg.get_tokens():
 		if token.spelling == '=':
-			return str_from_file(arg.extent.start.file.name, token.extent.end.offset, arg.extent.end.offset).lstrip()
+			return str_from_file(file, token.extent.end.offset, arg.extent.end.offset).lstrip()
 
 	return ''
+
+
+def load_defs_json(path):
+	try:
+		with open(path, 'r') as file:
+			defs = json.load(file)
+			defs['groups'] = set(defs['groups'])
+			defs['subgroups'] = set(defs['subgroups'])
+			return defs
+	except Exception:
+		return {}
 
 
 def Raise(e):
 	raise e
 
 # TODO: find a way to get file text from index OR improve current approach
-def str_from_file(filename, start, end):
-	with open(filename, 'r') as file:
-		file.seek(start)
-		return file.read(end - start)
+def str_from_file(file, start, end):
+	with open(str(file), 'r') as openfile:
+		openfile.seek(start)
+		return openfile.read(end - start)
+	#TODO: read from cached file
+	#return file[start:end]
 
 
-def get_macro_body(macro):
-	return str_from_file(macro.extent.start.file.name, macro.extent.start.offset + len(macro.spelling) + 1, macro.extent.end.offset - 1)
+def get_macro_body(file, macro):
+	return str_from_file(file, macro.extent.start.offset + len(macro.spelling) + 1, macro.extent.end.offset - 1)
+
 
 
 MACRO_ARGS_REGEX = r',\s*(?![^{}]*\}|[^<>]*>|[^\(\)]*\))'
-def get_macro_args(macro):
-	array = [i.strip() for i in re.split(MACRO_ARGS_REGEX, get_macro_body(macro))]
+def get_macro_args(file, macro):
+	array = [i.strip() for i in re.split(MACRO_ARGS_REGEX, get_macro_body(file, macro))]
 	return array if array != [''] else []
  
 # Builder
-def generate_register_header(env, scripts, target):
-	defs = parse_definitions(scripts, env['src'])
-	write_register_header(defs, env['src'], target)
-
-
-def parse_definitions(scripts, src):
-	defs = {}
-	for script in scripts:
-		defs |= {script: parse_header(script, src)}
-
-	return defs
-
-
-def parse_header(filename, src):
-	index = clang.cindex.Index.create()
-	translation_unit = index.parse(filename, args=['-Isrc', f'-I{src}'], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+def parse_header(index, file, src):
+	file_str = file.get_contents()
+	translation_unit = index.parse(str(file), args=['-Isrc', f'-I{src}'], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
 		raise Exception("Error: Failed to parse the translation unit!")
-
-	data = extract_methods_and_fields(translation_unit)
-	return data
-
-
-def extract_methods_and_fields(translation_unit):
 
 	classes = []
 	found_classes = []
@@ -138,7 +143,7 @@ def extract_methods_and_fields(translation_unit):
 			raise Exception(f'Incorrect usage of GCLASS at <{macros[1].location.file.name}>:{macros[1].location.line}:{macros[1].location.column}')
 		
 		for macro in macros:
-			classes.append((cursor, get_macro_args(macro)[1], macro.spelling[1:]))
+			classes.append((cursor, get_macro_args(file, macro)[1], macro.spelling[1:]))
 
 
 	collapse_list(found_class, lambda x: x.kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
@@ -170,19 +175,16 @@ def extract_methods_and_fields(translation_unit):
 				if macro.spelling.startswith('GEXPORT_'):
 					properties |= {
 						'hint' : 'PROPERTY_HINT_' + macro.spelling[8:],
-						# (len(macro.spelling) + 1, -1) - offsets to get body of GEXPORT_***(***) macro
-						'hint_string' : get_macro_body(macro)
+						'hint_string' : get_macro_body(file, macro)
 						}
 					continue
 
 				match macro.spelling:
 					case 'GPROPERTY':
-						# fail check here
 						if item.kind != clang.cindex.CursorKind.FIELD_DECL:
-							#TODO line:column error
 							raise Exception(f'Incorrect macro usage at {macro.location.line}:{macro.location.column}')
 
-						args = get_macro_args(macro)
+						args = get_macro_args(file, macro)
 						if len(args) != 2:
 							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
 					
@@ -194,13 +196,13 @@ def extract_methods_and_fields(translation_unit):
 								}
 
 					case 'GGROUP':
-						group = get_macro_body(macro)
+						group = get_macro_body(file, macro)
 						if group != '':
 							class_defs['groups'].add((group, group.lower().replace(" ", "") + "_"))
 						subgroup = ''
 
 					case 'GSUBGROUP':
-						subgroup = get_macro_body(macro)
+						subgroup = get_macro_body(file, macro)
 						if subgroup != '':
 							class_defs['subgroups'].add((subgroup, group.lower().replace(" ", "") + "_" + subgroup.lower().replace(" ", "") + "_"))
 
@@ -216,7 +218,7 @@ def extract_methods_and_fields(translation_unit):
 						properties['enum_type'] = 'bitfields'
 
 					case 'GSIGNAL':
-						macro_args = get_macro_args(macro)
+						macro_args = get_macro_args(file, macro)
 						name = macro_args[0]
 						args = get_pair_arglist(macro_args[1:], '')
 						class_defs['signals'].append((name, args))
@@ -225,7 +227,7 @@ def extract_methods_and_fields(translation_unit):
 						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
 							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column} (GRPC only usable with methods)')
 
-						macro_args = get_macro_args(macro)
+						macro_args = get_macro_args(file, macro)
 						rpc_mode, transfer_mode, call_local, channel = None, None, None, None
 
 						if len(macro_args) != 0 and macro_args[-1].isnumeric():
@@ -257,7 +259,7 @@ def extract_methods_and_fields(translation_unit):
 						properties['rpc_config'] = rpc_config 
 
 					case 'GVARARG':
-						varargs = get_pair_arglist(get_macro_args(macro), 'Variant')
+						varargs = get_pair_arglist(get_macro_args(file, macro), 'Variant')
 						properties['is_vararg'] = True
 						properties['args'] = varargs
 
@@ -275,7 +277,7 @@ def extract_methods_and_fields(translation_unit):
 							'name' : item.spelling,
 							'return' : item.result_type.spelling,
 							# Must be a better way of getting default method arguments
-							'args' : [(arg.type.spelling, arg.spelling, find_default_arg(arg)) for arg in item.get_arguments()],
+							'args' : [(arg.type.spelling, arg.spelling, find_default_arg(file, arg)) for arg in item.get_arguments()],
 							'is_static' : item.is_static_method(),
 							'is_vararg': False,
 							'rpc_config' : None
@@ -412,12 +414,16 @@ def write_register_header(defs, src, target):
 			bind.append('') if bind[-1] != '' else None
 
 			for const in content['constants']:
-				bind.append(f'	BIND_CONSTANT({const});\n')
+				bind.append(f'	BIND_CONSTANT({const});')
 
 			header_rpc_config += '}\n'
-			bind = f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind)[1:] + '};\n' + header_rpc_config + outside_bind + '\n'
+			bind = f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind)[1:] + '\n};\n' + header_rpc_config + '\n'
 
 			header_binds += bind
+
+			if outside_bind != '':
+				 with open(file + '.gen', 'w') as openfile:
+					 openfile.write(outside_bind)
 
 	header += '\nusing namespace godot;\n\n'
 	header += header_register + '}\n\n'
