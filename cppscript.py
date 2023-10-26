@@ -10,18 +10,23 @@ scripts = []
 
 # Helpers
 def generate_header(target, source, env):
-	if target[0].changed():
-		cached_sigs = [i.csig for i in target[0].get_stored_info().binfo.bsourcesigs]
-		cached_defs = load_defs_json('defs.json')
+	try:
+		if target[0].changed():
+			cached_sigs = [i.csig for i in target[0].get_stored_info().binfo.bsourcesigs]
+			cached_defs = load_defs_json('defs.json')
 
-		index = clang.cindex.Index.create()
+			index = clang.cindex.Index.create()
 
-		new_defs = {str(file): cached_defs[str(file)] if file.get_csig() in cached_sigs and str(file) in cached_defs.keys() else parse_header(index, file, env['src']) for file in source}
+			new_defs = {str(file): cached_defs[str(file)] if file.get_csig() in cached_sigs and str(file) in cached_defs.keys() else parse_header(index, file, env['src']) for file in source}
 
-		write_register_header(new_defs, env['src'], str(target[0]))
-		
-		with open('defs.json', 'w') as file:
-			json.dump(new_defs, file, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
+			write_register_header(new_defs, env['src'], str(target[0]))
+			
+			with open('defs.json', 'w') as file:
+				json.dump(new_defs, file, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
+
+	except Exception as e:
+		print(e)
+		return 1
 
 
 def generate_header_emitter(target, source, env):
@@ -69,13 +74,9 @@ def load_defs_json(path):
 def Raise(e):
 	raise e
 
-# TODO: find a way to get file text from index OR improve current approach
+
 def str_from_file(file, start, end):
-	with open(str(file), 'r') as openfile:
-		openfile.seek(start)
-		return openfile.read(end - start)
-	#TODO: read from cached file
-	#return file[start:end]
+	return file[start:end]
 
 
 def get_macro_body(file, macro):
@@ -89,9 +90,9 @@ def get_macro_args(file, macro):
 	return array if array != [''] else []
  
 # Builder
-def parse_header(index, file, src):
-	file_str = file.get_contents()
-	translation_unit = index.parse(str(file), args=['-Isrc', f'-I{src}'], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+def parse_header(index, scons_file, src):
+	file = scons_file.get_text_contents()
+	translation_unit = index.parse(str(scons_file), args=['-Isrc', f'-I{src}'], unsaved_files=[(str(scons_file), file)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
 		raise Exception("Error: Failed to parse the translation unit!")
