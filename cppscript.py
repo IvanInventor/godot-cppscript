@@ -111,7 +111,8 @@ def parse_header(index, scons_file, src):
 		for cursor in parent.get_children():
 			match cursor.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
-					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
+					# Temporarily do not register virtual methods
+					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC and not cursor.is_virtual_method():
 						class_cursors.append(cursor)
 					
 				case clang.cindex.CursorKind.FIELD_DECL:
