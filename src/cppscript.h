@@ -1,3 +1,7 @@
+#include <godot_cpp/classes/multiplayer_api.hpp>
+#include <godot_cpp/classes/multiplayer_peer.hpp>
+
+
 #define REGISTER_CLASS_GEN_CODE(CLASS_NAME) REGISTER_CLASS_GEN_CODE_CLASS_ ## CLASS_NAME
 #define STR(s) # s
 #define EXPORT_METHOD(METHOD_NAME, ...)

@@ -17,16 +17,23 @@ def generate_header(target, source, env):
 
 			index = clang.cindex.Index.create()
 
-			new_defs = {str(file): cached_defs[str(file)] if file.get_csig() in cached_sigs and str(file) in cached_defs.keys() else parse_header(index, file, env['src']) for file in source}
+			new_defs = {}
+			new_defs_list = []
+			for file in source:
+				if file.get_csig() in cached_sigs and str(file) in cached_defs.keys():
+					new_defs |= {str(file): cached_defs[str(file)]}
+				else:
+					new_defs |= {str(file): parse_header(index, file, env['src'])}
+					new_defs_list.append(str(file))
 
-			write_register_header(new_defs, env['src'], str(target[0]))
+			write_register_header(new_defs, new_defs_list, env['src'], str(target[0]))
 			
 			with open('defs.json', 'w') as file:
 				json.dump(new_defs, file, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
 
 	except Exception as e:
-		print(e)
-		return 1
+		# return 1
+		raise e
 
 
 def generate_header_emitter(target, source, env):
@@ -276,6 +283,7 @@ def parse_header(index, scons_file, src):
 					if item.spelling not in VIRTUAL_METHODS:
 						properties = {
 							'name' : item.spelling,
+							'bind_name' : item.spelling,
 							'return' : item.result_type.spelling,
 							# Must be a better way of getting default method arguments
 							'args' : [(arg.type.spelling, arg.spelling, find_default_arg(file, arg)) for arg in item.get_arguments()],
@@ -326,42 +334,37 @@ def parse_header(index, scons_file, src):
 	return parsed_classes
 
 
-def write_register_header(defs, src, target):		
-	#import json
-	#print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
-	
-	header = ''
+def write_register_header(defs, new_list, src, target):		
+	scripts_header = ''
 	header_register = 'inline void register_script_classes() {\n'
-	header_binds = ''
+	header_defs = ''
 
 	for file, classes in defs.items():
-		if len(classes) == 0:
-			continue
-		
-		header += f'#include <{os.path.relpath(file, src)}>\n'
+		if len(classes) != 0:
+			scripts_header += f'#include <{os.path.relpath(file, src)}>\n'
+
 		for class_name, content in classes.items():
 			header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
+
+		for class_name, content in classes.items():
+			Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', '', ''
 			header_rpc_config = f'void {class_name}::_rpc_config() {{\n'
-			bind = ['']
 			outside_bind = ''
 			
-			#Groups/subgroups declarations
 			for group, name in content['groups']:
-				bind.append(f'	ADD_GROUP("{group}", "{name}");')
-
-			bind.append('') if bind[-1] != '' else None
+				Hgroup += f'	ADD_GROUP("{group}", "{name}");\n'
 
 			for subgroup, name in content['subgroups']:
-				bind.append(f'	ADD_SUBGROUP("{subgroup}", "{name}");')
-
-			bind.append('') if bind[-1] != '' else None
+				Hsubgroup += f'	ADD_SUBGROUP("{subgroup}", "{name}");\n'
 
 			for method in content['methods']:
 				if not method['is_vararg']:
 					args = ''.join([f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args']])
 					defvals = ''.join([f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != ''])
-
-					bind.append((f'	ClassDB::bind_static_method("{class_name}", ' if method['is_static'] else '	ClassDB::bind_method(') + f'D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]}{defvals});')
+					if method['is_static']:
+						Hstatic_method += f'	ClassDB::bind_static_method("{class_name}", D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
+					else:
+						Hmethod += f'	ClassDB::bind_method(D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
 
 					if method['rpc_config'] != None:
 						header_rpc_config += f"""	{{
@@ -376,60 +379,46 @@ def write_register_header(defs, src, target):
 				else:
 					args_list = '\n'.join([f'		mi.arguments.push_back(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"));' for type, name in method['args']])
 
-					fmt = f"""	{{
+					Hvaragr_method += f"""	{{
 		MethodInfo mi;
 		mi.name = "{method["name"]}";
 """ + args_list + f"""
-		ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "{method["name"]}", &{class_name}::{method["name"]}, mi);
+		ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "{method["bind_name"]}", &{class_name}::{method["name"]}, mi);
 	}}
 """
-					bind.append(fmt)
-
-			bind.append('') if bind[-1] != '' else None
 
 			for prop in content['properties']:
-				bind.append(f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{prop["type"]}>::VARIANT_TYPE, "{prop["name"]}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");')
-
-			bind.append('') if bind[-1] != '' else None
+				Hprop += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{prop["type"]}>::VARIANT_TYPE, "{prop["name"]}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");\n'
 
 			for signal_name, args in content['signals']:
 				args_str = ''.join([f', PropertyInfo(GetTypeInfo<{arg_type if arg_type != "" else "Variant"}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args])
-				bind.append(f'	ADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));')
-
-			bind.append('') if bind[-1] != '' else None
+				Hsignal += f'	ADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));\n'
 
 			for enum, consts in content['enum_constants'].items():
-				#TODO: generate inside class header
 				outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
 				for const in consts:
-					bind.append(f'	BIND_ENUM_CONSTANT({const});')
-
-			bind.append('') if bind[-1] != '' else None
+					Henum += f'	BIND_ENUM_CONSTANT({const});\n'
 
 			for enum, consts in content['bitfields'].items():
-				#TODO: generate inside class header
 				outside_bind += f'VARIANT_BITFIELD_CAST({enum});\n'
 				for const in consts:
-					bind.append(f'	BIND_BITFIELD_FLAG({const});')
-
-			bind.append('') if bind[-1] != '' else None
+					Hbitfield += f'	BIND_BITFIELD_FLAG({const});\n'
 
 			for const in content['constants']:
-				bind.append(f'	BIND_CONSTANT({const});')
+				Hconst += f'	BIND_CONSTANT({const});\n'
 
 			header_rpc_config += '}\n'
-			bind = f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind)[1:] + '\n};\n' + header_rpc_config + '\n'
+			bind_array = [i for i in [Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '']
+			header_defs += f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind_array) + '}\n\n' + header_rpc_config
 
-			header_binds += bind
+			# TODO: check if needs write
+			with open(file + '.gen', 'w') as openfile:
+				openfile.write(outside_bind)
 
-			if outside_bind != '':
-				 with open(file + '.gen', 'w') as openfile:
-					 openfile.write(outside_bind)
-
-	header += '\nusing namespace godot;\n\n'
-	header += header_register + '}\n\n'
-	header += header_binds
+	scripts_header += '\nusing namespace godot;\n\n'
+	scripts_header += header_register + '}\n\n'
+	scripts_header += header_defs
 
 	with open(target, 'w') as file:
-		file.write(header)
+		file.write(scripts_header)
 
