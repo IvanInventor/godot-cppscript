@@ -115,8 +115,7 @@ def parse_header(index, scons_file, src):
 						class_cursors.append(cursor)
 					
 				case clang.cindex.CursorKind.FIELD_DECL:
-					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
-						class_cursors.append(cursor)
+					class_cursors.append(cursor)
 								
 				case clang.cindex.CursorKind.ENUM_DECL:
 					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
@@ -322,12 +321,13 @@ def parse_header(index, scons_file, src):
 						}
 					process_macros(item, macros, properties)
 
-					properties |= { 'name': item.spelling,
-		    					'group' : "" if group == "" else group.lower().replace(" ", "") + "_",
-		    					'subgroup' : "" if subgroup == "" else subgroup.lower().replace(" ", "") + "_"
-		    					}
+					if properties['type'] != '':
+						properties |= { 'name': item.spelling,
+								'group' : "" if group == "" else group.lower().replace(" ", "") + "_",
+								'subgroup' : "" if subgroup == "" else subgroup.lower().replace(" ", "") + "_"
+								}
 
-					class_defs['properties'].append(properties)
+						class_defs['properties'].append(properties)
 
 			return item
 
@@ -350,10 +350,10 @@ def write_register_header(defs, new_list, src, target):
 		for class_name, content in classes.items():
 			header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
 
+		outside_bind = ''
 		for class_name, content in classes.items():
 			Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', '', ''
 			header_rpc_config = f'void {class_name}::_rpc_config() {{\n'
-			outside_bind = ''
 			methods_list = [method['bind_name'] for method in content['methods']]
 			
 			for group, name in content['groups']:
@@ -423,9 +423,9 @@ def write_register_header(defs, new_list, src, target):
 			bind_array = [i for i in [Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '']
 			header_defs += f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind_array) + '}\n\n' + header_rpc_config
 
-			# TODO: check if needs write
-			with open(file + '.gen', 'w') as openfile:
-				openfile.write(outside_bind)
+		# TODO: check if needs write
+		with open(file + '.gen', 'w') as openfile:
+			openfile.write(outside_bind)
 
 	scripts_header += '\nusing namespace godot;\n\n'
 	scripts_header += header_register + '}\n\n'
