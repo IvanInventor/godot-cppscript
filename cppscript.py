@@ -1,6 +1,6 @@
 from SCons.Script import *
 import clang.cindex
-import os, re
+import os, re, json
 
 
 
@@ -10,8 +10,30 @@ scripts = []
 
 # Helpers
 def generate_header(target, source, env):
-	#TODO: cache generated definitions
-	generate_register_header(env, [str(i) for i in source], str(target[0]))
+	try:
+		if target[0].changed():
+			cached_sigs = [i.csig for i in target[0].get_stored_info().binfo.bsourcesigs]
+			cached_defs = load_defs_json('defs.json')
+
+			index = clang.cindex.Index.create()
+
+			new_defs = {}
+			new_defs_list = []
+			for file in source:
+				if file.get_csig() in cached_sigs and str(file) in cached_defs.keys():
+					new_defs |= {str(file): cached_defs[str(file)]}
+				else:
+					new_defs |= {str(file): parse_header(index, file, env['src'])}
+					new_defs_list.append(str(file))
+
+			write_register_header(new_defs, new_defs_list, env['src'], str(target[0]))
+			
+			with open('defs.json', 'w') as file:
+				json.dump(new_defs, file, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
+
+	except Exception as e:
+		# return 1
+		raise e
 
 
 def generate_header_emitter(target, source, env):
@@ -36,59 +58,51 @@ def get_pair_arglist(args, default_left):
 	return pairs
 
 
-def find_default_arg(arg):
+def find_default_arg(file, arg):
+	arg_def = str_from_file(arg.extent.start.file.name, arg.extent.start.offset, arg.extent.end.offset)
 	for token in arg.get_tokens():
 		if token.spelling == '=':
-			return str_from_file(arg.extent.start.file.name, token.extent.end.offset, arg.extent.end.offset).lstrip()
+			return str_from_file(file, token.extent.end.offset, arg.extent.end.offset).lstrip()
 
 	return ''
+
+
+def load_defs_json(path):
+	try:
+		with open(path, 'r') as file:
+			defs = json.load(file)
+			defs['groups'] = set(defs['groups'])
+			defs['subgroups'] = set(defs['subgroups'])
+			return defs
+	except Exception:
+		return {}
 
 
 def Raise(e):
 	raise e
 
-# TODO: find a way to get file text from index OR improve current approach
-def str_from_file(filename, start, end):
-	with open(filename, 'r') as file:
-		file.seek(start)
-		return file.read(end - start)
+
+def str_from_file(file, start, end):
+	return file[start:end]
 
 
-def get_macro_body(macro):
-	return str_from_file(macro.extent.start.file.name, macro.extent.start.offset + len(macro.spelling) + 1, macro.extent.end.offset - 1)
+def get_macro_body(file, macro):
+	return str_from_file(file, macro.extent.start.offset + len(macro.spelling) + 1, macro.extent.end.offset - 1)
+
 
 
 MACRO_ARGS_REGEX = r',\s*(?![^{}]*\}|[^<>]*>|[^\(\)]*\))'
-def get_macro_args(macro):
-	array = [i.strip() for i in re.split(MACRO_ARGS_REGEX, get_macro_body(macro))]
+def get_macro_args(file, macro):
+	array = [i.strip() for i in re.split(MACRO_ARGS_REGEX, get_macro_body(file, macro))]
 	return array if array != [''] else []
  
 # Builder
-def generate_register_header(env, scripts, target):
-	defs = parse_definitions(scripts, env['src'])
-	write_register_header(defs, env['src'], target)
-
-
-def parse_definitions(scripts, src):
-	defs = {}
-	for script in scripts:
-		defs |= {script: parse_header(script, src)}
-
-	return defs
-
-
-def parse_header(filename, src):
-	index = clang.cindex.Index.create()
-	translation_unit = index.parse(filename, args=['-Isrc', f'-I{src}'], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+def parse_header(index, scons_file, src):
+	file = scons_file.get_text_contents()
+	translation_unit = index.parse(str(scons_file), args=['-Isrc', f'-I{src}'], unsaved_files=[(str(scons_file), file)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
 		raise Exception("Error: Failed to parse the translation unit!")
-
-	data = extract_methods_and_fields(translation_unit)
-	return data
-
-
-def extract_methods_and_fields(translation_unit):
 
 	classes = []
 	found_classes = []
@@ -97,7 +111,8 @@ def extract_methods_and_fields(translation_unit):
 		for cursor in parent.get_children():
 			match cursor.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
-					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
+					# Temporarily do not register virtual methods
+					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC and not cursor.is_virtual_method():
 						class_cursors.append(cursor)
 					
 				case clang.cindex.CursorKind.FIELD_DECL:
@@ -136,7 +151,7 @@ def extract_methods_and_fields(translation_unit):
 			raise Exception(f'Incorrect usage of GCLASS at <{macros[1].location.file.name}>:{macros[1].location.line}:{macros[1].location.column}')
 		
 		for macro in macros:
-			classes.append((cursor, get_macro_args(macro)[1], macro.spelling[1:]))
+			classes.append((cursor, get_macro_args(file, macro)[1], macro.spelling[1:]))
 
 
 	collapse_list(found_class, lambda x: x.kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
@@ -168,19 +183,16 @@ def extract_methods_and_fields(translation_unit):
 				if macro.spelling.startswith('GEXPORT_'):
 					properties |= {
 						'hint' : 'PROPERTY_HINT_' + macro.spelling[8:],
-						# (len(macro.spelling) + 1, -1) - offsets to get body of GEXPORT_***(***) macro
-						'hint_string' : get_macro_body(macro)
+						'hint_string' : get_macro_body(file, macro)
 						}
 					continue
 
 				match macro.spelling:
 					case 'GPROPERTY':
-						# fail check here
 						if item.kind != clang.cindex.CursorKind.FIELD_DECL:
-							#TODO line:column error
 							raise Exception(f'Incorrect macro usage at {macro.location.line}:{macro.location.column}')
 
-						args = get_macro_args(macro)
+						args = get_macro_args(file, macro)
 						if len(args) != 2:
 							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
 					
@@ -192,13 +204,13 @@ def extract_methods_and_fields(translation_unit):
 								}
 
 					case 'GGROUP':
-						group = get_macro_body(macro)
+						group = get_macro_body(file, macro)
 						if group != '':
 							class_defs['groups'].add((group, group.lower().replace(" ", "") + "_"))
 						subgroup = ''
 
 					case 'GSUBGROUP':
-						subgroup = get_macro_body(macro)
+						subgroup = get_macro_body(file, macro)
 						if subgroup != '':
 							class_defs['subgroups'].add((subgroup, group.lower().replace(" ", "") + "_" + subgroup.lower().replace(" ", "") + "_"))
 
@@ -214,7 +226,7 @@ def extract_methods_and_fields(translation_unit):
 						properties['enum_type'] = 'bitfields'
 
 					case 'GSIGNAL':
-						macro_args = get_macro_args(macro)
+						macro_args = get_macro_args(file, macro)
 						name = macro_args[0]
 						args = get_pair_arglist(macro_args[1:], '')
 						class_defs['signals'].append((name, args))
@@ -223,7 +235,7 @@ def extract_methods_and_fields(translation_unit):
 						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
 							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column} (GRPC only usable with methods)')
 
-						macro_args = get_macro_args(macro)
+						macro_args = get_macro_args(file, macro)
 						rpc_mode, transfer_mode, call_local, channel = None, None, None, None
 
 						if len(macro_args) != 0 and macro_args[-1].isnumeric():
@@ -255,7 +267,7 @@ def extract_methods_and_fields(translation_unit):
 						properties['rpc_config'] = rpc_config 
 
 					case 'GVARARG':
-						varargs = get_pair_arglist(get_macro_args(macro), 'Variant')
+						varargs = get_pair_arglist(get_macro_args(file, macro), 'Variant')
 						properties['is_vararg'] = True
 						properties['args'] = varargs
 
@@ -271,9 +283,10 @@ def extract_methods_and_fields(translation_unit):
 					if item.spelling not in VIRTUAL_METHODS and not item.is_virtual_method(): # Do not register virtual temporary
 						properties = {
 							'name' : item.spelling,
+							'bind_name' : item.spelling,
 							'return' : item.result_type.spelling,
 							# Must be a better way of getting default method arguments
-							'args' : [(arg.type.spelling, arg.spelling, find_default_arg(arg)) for arg in item.get_arguments()],
+							'args' : [(arg.type.spelling, arg.spelling, find_default_arg(file, arg)) for arg in item.get_arguments()],
 							'is_static' : item.is_static_method(),
 							'is_vararg': False,
 							'rpc_config' : None
@@ -298,6 +311,8 @@ def extract_methods_and_fields(translation_unit):
 				case clang.cindex.CursorKind.FIELD_DECL:
 					properties = {
 						'name' : '',
+						'group' : '',
+						'subgroup' : '',
 						'type' : '',
 						'setter' : '',
 						'getter' : '',
@@ -307,10 +322,13 @@ def extract_methods_and_fields(translation_unit):
 						}
 					process_macros(item, macros, properties)
 
-					name = ("" if group == "" else group.lower().replace(" ", "") + "_") + ("" if subgroup == "" else subgroup.lower().replace(" ", "") + "_") + item.spelling
-					properties |= {'name': name}
+					if properties['type'] != '':
+						properties |= { 'name': item.spelling,
+								'group' : "" if group == "" else group.lower().replace(" ", "") + "_",
+								'subgroup' : "" if subgroup == "" else subgroup.lower().replace(" ", "") + "_"
+								}
 
-					class_defs['properties'].append(properties)
+						class_defs['properties'].append(properties)
 
 			return item
 
@@ -321,42 +339,38 @@ def extract_methods_and_fields(translation_unit):
 	return parsed_classes
 
 
-def write_register_header(defs, src, target):		
-	#import json
-	#print(json.dumps(defs, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x)))
-	
-	header = ''
+def write_register_header(defs, new_list, src, target):		
+	scripts_header = ''
 	header_register = 'inline void register_script_classes() {\n'
-	header_binds = ''
+	header_defs = ''
 
 	for file, classes in defs.items():
-		if len(classes) == 0:
-			continue
-		
-		header += f'#include <{os.path.relpath(file, src)}>\n'
+		if len(classes) != 0:
+			scripts_header += f'#include <{os.path.relpath(file, src)}>\n'
+
 		for class_name, content in classes.items():
 			header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
-			header_rpc_config = f'void {class_name}::_rpc_config() {{\n'
-			bind = ['']
-			outside_bind = ''
-			
-			#Groups/subgroups declarations
-			for group, name in content['groups']:
-				bind.append(f'	ADD_GROUP("{group}", "{name}");')
 
-			bind.append('') if bind[-1] != '' else None
+		outside_bind = ''
+		for class_name, content in classes.items():
+			Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', '', ''
+			header_rpc_config = f'void {class_name}::_rpc_config() {{\n'
+			methods_list = [method['bind_name'] for method in content['methods']]
+			
+			for group, name in content['groups']:
+				Hgroup += f'	ADD_GROUP("{group}", "{name}");\n'
 
 			for subgroup, name in content['subgroups']:
-				bind.append(f'	ADD_SUBGROUP("{subgroup}", "{name}");')
-
-			bind.append('') if bind[-1] != '' else None
+				Hsubgroup += f'	ADD_SUBGROUP("{subgroup}", "{name}");\n'
 
 			for method in content['methods']:
 				if not method['is_vararg']:
 					args = ''.join([f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args']])
 					defvals = ''.join([f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != ''])
-
-					bind.append((f'	ClassDB::bind_static_method("{class_name}", ' if method['is_static'] else '	ClassDB::bind_method(') + f'D_METHOD("{method["name"]}"{args}), &{class_name}::{method["name"]}{defvals});')
+					if method['is_static']:
+						Hstatic_method += f'	ClassDB::bind_static_method("{class_name}", D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
+					else:
+						Hmethod += f'	ClassDB::bind_method(D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
 
 					if method['rpc_config'] != None:
 						header_rpc_config += f"""	{{
@@ -371,56 +385,53 @@ def write_register_header(defs, src, target):
 				else:
 					args_list = '\n'.join([f'		mi.arguments.push_back(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"));' for type, name in method['args']])
 
-					fmt = f"""	{{
+					Hvaragr_method += f"""	{{
 		MethodInfo mi;
 		mi.name = "{method["name"]}";
 """ + args_list + f"""
-		ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "{method["name"]}", &{class_name}::{method["name"]}, mi);
+		ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "{method["bind_name"]}", &{class_name}::{method["name"]}, mi);
 	}}
 """
-					bind.append(fmt)
-
-			bind.append('') if bind[-1] != '' else None
 
 			for prop in content['properties']:
-				bind.append(f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{prop["type"]}>::VARIANT_TYPE, "{prop["name"]}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");')
+				prop_name = prop['group'] + prop['subgroup'] + prop['name']
+				Hprop += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({class_name}::{prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");\n'
 
-			bind.append('') if bind[-1] != '' else None
+				if prop['getter'] not in methods_list:
+					Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::_cppscript_getter<&{class_name}::{prop["name"]}, decltype({class_name}::{prop["name"]})>);\n'
+
+				if prop['setter'] not in methods_list:
+					Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::_cppscript_setter<&{class_name}::{prop["name"]}, decltype({class_name}::{prop["name"]})>);\n'
 
 			for signal_name, args in content['signals']:
 				args_str = ''.join([f', PropertyInfo(GetTypeInfo<{arg_type if arg_type != "" else "Variant"}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args])
-				bind.append(f'	ADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));')
-
-			bind.append('') if bind[-1] != '' else None
+				Hsignal += f'	ADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));\n'
 
 			for enum, consts in content['enum_constants'].items():
-				#TODO: generate inside class header
 				outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
 				for const in consts:
-					bind.append(f'	BIND_ENUM_CONSTANT({const});')
-
-			bind.append('') if bind[-1] != '' else None
+					Henum += f'	BIND_ENUM_CONSTANT({const});\n'
 
 			for enum, consts in content['bitfields'].items():
-				#TODO: generate inside class header
 				outside_bind += f'VARIANT_BITFIELD_CAST({enum});\n'
 				for const in consts:
-					bind.append(f'	BIND_BITFIELD_FLAG({const});')
-
-			bind.append('') if bind[-1] != '' else None
+					Hbitfield += f'	BIND_BITFIELD_FLAG({const});\n'
 
 			for const in content['constants']:
-				bind.append(f'	BIND_CONSTANT({const});\n')
+				Hconst += f'	BIND_CONSTANT({const});\n'
 
 			header_rpc_config += '}\n'
-			bind = f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind)[1:] + '};\n' + header_rpc_config + outside_bind + '\n'
+			bind_array = [i for i in [Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '']
+			header_defs += f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind_array) + '}\n\n' + header_rpc_config
 
-			header_binds += bind
+		# TODO: check if needs write
+		with open(file + '.gen', 'w') as openfile:
+			openfile.write(outside_bind)
 
-	header += '\nusing namespace godot;\n\n'
-	header += header_register + '}\n\n'
-	header += header_binds
+	scripts_header += '\nusing namespace godot;\n\n'
+	scripts_header += header_register + '}\n\n'
+	scripts_header += header_defs
 
 	with open(target, 'w') as file:
-		file.write(header)
+		file.write(scripts_header)
 
