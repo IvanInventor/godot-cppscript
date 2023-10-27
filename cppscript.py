@@ -351,9 +351,9 @@ def write_register_header(defs, new_list, src, target):
 		for class_name, content in classes.items():
 			header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
 
-		outside_bind = ''
 		for class_name, content in classes.items():
 			Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', '', ''
+			outside_bind = ''
 			header_rpc_config = f'void {class_name}::_rpc_config() {{\n'
 			methods_list = [method['bind_name'] for method in content['methods']]
 			
@@ -422,11 +422,7 @@ def write_register_header(defs, new_list, src, target):
 
 			header_rpc_config += '}\n'
 			bind_array = [i for i in [Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '']
-			header_defs += f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind_array) + '}\n\n' + header_rpc_config
-
-		# TODO: check if needs write
-		with open(file + '.gen', 'w') as openfile:
-			openfile.write(outside_bind)
+			header_defs += outside_bind + f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind_array) + '}\n\n' + header_rpc_config
 
 	scripts_header += '\nusing namespace godot;\n\n'
 	scripts_header += header_register + '}\n\n'
