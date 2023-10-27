@@ -311,6 +311,8 @@ def parse_header(index, scons_file, src):
 				case clang.cindex.CursorKind.FIELD_DECL:
 					properties = {
 						'name' : '',
+						'group' : '',
+						'subgroup' : '',
 						'type' : '',
 						'setter' : '',
 						'getter' : '',
@@ -320,8 +322,10 @@ def parse_header(index, scons_file, src):
 						}
 					process_macros(item, macros, properties)
 
-					name = ("" if group == "" else group.lower().replace(" ", "") + "_") + ("" if subgroup == "" else subgroup.lower().replace(" ", "") + "_") + item.spelling
-					properties |= {'name': name}
+					properties |= { 'name': item.spelling,
+		    					'group' : "" if group == "" else group.lower().replace(" ", "") + "_",
+		    					'subgroup' : "" if subgroup == "" else subgroup.lower().replace(" ", "") + "_"
+		    					}
 
 					class_defs['properties'].append(properties)
 
@@ -350,6 +354,7 @@ def write_register_header(defs, new_list, src, target):
 			Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', '', ''
 			header_rpc_config = f'void {class_name}::_rpc_config() {{\n'
 			outside_bind = ''
+			methods_list = [method['bind_name'] for method in content['methods']]
 			
 			for group, name in content['groups']:
 				Hgroup += f'	ADD_GROUP("{group}", "{name}");\n'
@@ -388,7 +393,14 @@ def write_register_header(defs, new_list, src, target):
 """
 
 			for prop in content['properties']:
-				Hprop += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{prop["type"]}>::VARIANT_TYPE, "{prop["name"]}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");\n'
+				prop_name = prop['group'] + prop['subgroup'] + prop['name']
+				Hprop += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<{prop["type"]}>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");\n'
+
+				if prop['getter'] not in methods_list:
+					Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::_cppscript_getter<&{class_name}::{prop["name"]}, {prop["type"]}>);\n'
+
+				if prop['setter'] not in methods_list:
+					Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::_cppscript_setter<&{class_name}::{prop["name"]}, {prop["type"]}>);\n'
 
 			for signal_name, args in content['signals']:
 				args_str = ''.join([f', PropertyInfo(GetTypeInfo<{arg_type if arg_type != "" else "Variant"}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args])
