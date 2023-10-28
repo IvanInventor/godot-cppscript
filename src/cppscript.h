@@ -31,6 +31,7 @@ void _rpc_config();											\
 #define GSIGNAL(...)
 #define GRPC(...)
 #define GVARARG(...)
+#define GIGNORE(...)
 
 #define GEXPORT_NONE(...)
 #define GEXPORT_RANGE(...)

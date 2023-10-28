@@ -4,7 +4,7 @@ import os, re, json
 
 
 
-KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG']
+KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE']
 VIRTUAL_METHODS = ['_enter_tree', '_exit_tree', '_input', '_unhandled_input', '_unhandled_key_input', '_process', '_physics_process']
 scripts = []
 
@@ -179,6 +179,7 @@ def parse_header(index, scons_file, src):
 		def process_macros(item, macros, properties):
 			nonlocal group
 			nonlocal subgroup
+			is_ignored = False
 			for macro in macros:
 				if macro.spelling.startswith('GEXPORT_'):
 					properties |= {
@@ -270,8 +271,11 @@ def parse_header(index, scons_file, src):
 						varargs = get_pair_arglist(get_macro_args(file, macro), 'Variant')
 						properties['is_vararg'] = True
 						properties['args'] = varargs
+					
+					case 'GIGNORE':
+						is_ignored = True
 
-
+			return not is_ignored
 
 
 		def apply_macros(item, macros):
@@ -292,21 +296,21 @@ def parse_header(index, scons_file, src):
 							'rpc_config' : None
 							}
 
-						process_macros(item, macros, properties)
+						if process_macros(item, macros, properties):
 
-						if properties != None:
-							class_defs['methods'].append(properties)
+							if properties != None:
+								class_defs['methods'].append(properties)
 
 				case clang.cindex.CursorKind.ENUM_DECL:
 					properties = {'enum_type' : 'enum_constants'}
 					properties['list'] = [enum.spelling for enum in item.get_children() if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL]
 
-					process_macros(item, macros, properties)
+					if process_macros(item, macros, properties):
 
-					if item.type.spelling[-1] != ')':	# check for named enum
-						class_defs[properties['enum_type']][item.type.spelling] = properties['list']
-					else:
-						class_defs['constants'] += properties['list']
+						if item.type.spelling[-1] != ')':	# check for named enum
+							class_defs[properties['enum_type']][item.type.spelling] = properties['list']
+						else:
+							class_defs['constants'] += properties['list']
 
 				case clang.cindex.CursorKind.FIELD_DECL:
 					properties = {
@@ -320,15 +324,15 @@ def parse_header(index, scons_file, src):
 						'hint_string' : '',
 						'is_static' : item.is_static_method()
 						}
-					process_macros(item, macros, properties)
+					if process_macros(item, macros, properties):
 
-					if properties['type'] != '':
-						properties |= { 'name': item.spelling,
-								'group' : "" if group == "" else group.lower().replace(" ", "") + "_",
-								'subgroup' : "" if subgroup == "" else subgroup.lower().replace(" ", "") + "_"
-								}
+						if properties['type'] != '':
+							properties |= { 'name': item.spelling,
+									'group' : "" if group == "" else group.lower().replace(" ", "") + "_",
+									'subgroup' : "" if subgroup == "" else subgroup.lower().replace(" ", "") + "_"
+									}
 
-						class_defs['properties'].append(properties)
+							class_defs['properties'].append(properties)
 
 			return item
 
