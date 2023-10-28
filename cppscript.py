@@ -1,51 +1,42 @@
 from SCons.Script import *
 import clang.cindex
-import os, re, json
+import os, sys, re, json
 
 
 
 KEYWORDS = ['GMETHOD', 'GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GCONSTANT', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE']
 VIRTUAL_METHODS = ['_enter_tree', '_exit_tree', '_input', '_unhandled_input', '_unhandled_key_input', '_process', '_physics_process']
-scripts = []
 
 # Helpers
 def generate_header(target, source, env):
 	try:
-		if target[0].changed():
-			cached_sigs = [i.csig for i in target[0].get_stored_info().binfo.bsourcesigs]
-			cached_defs = load_defs_json('defs.json')
+		sourcesigs, sources = target[0].get_stored_info().binfo.bsourcesigs, target[0].get_stored_info().binfo.bsources
+		cached_defs = load_defs_json('defs.json')
+		index = clang.cindex.Index.create()
 
-			index = clang.cindex.Index.create()
+		new_defs = {str(s) : (cached_defs[str(s)] if str(s) in sources and s.get_csig() == sourcesigs[sources.index(str(s))].csig and str(s) in cached_defs.keys() else parse_header(index, s, env['src'])) for s in source}
 
-			new_defs = {}
-			new_defs_list = []
-			for file in source:
-				if file.get_csig() in cached_sigs and str(file) in cached_defs.keys():
-					new_defs |= {str(file): cached_defs[str(file)]}
-				else:
-					new_defs |= {str(file): parse_header(index, file, env['src'])}
-					new_defs_list.append(str(file))
-
-			write_register_header(new_defs, new_defs_list, env['src'], str(target[0]))
-			
-			with open('defs.json', 'w') as file:
-				json.dump(new_defs, file, sort_keys=True, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
+		write_register_header(new_defs, env['src'], str(target[0]))
+		
+		with open('defs.json', 'w') as file:
+			json.dump(new_defs, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
 
 	except Exception as e:
-		# return 1
-		raise e
+		print(f'\n{e}\n', file=sys.stderr)
+		return 1
 
 
 def generate_header_emitter(target, source, env):
 	return env.File('src/scripts.gen.h'), source
 
 def collapse_list(list, key, action):
-	i, tail = 0, 0
-	while i < len(list):
+	tail = 0
+	for i in range(len(list)):
 		if key(list[i]) == True:
 			action(list[i], list[tail:i])
 			tail = i + 1
-		i += 1
+	return list[tail:]
+
 
 def get_pair_arglist(args, default_left):
 	pairs = []
@@ -102,7 +93,7 @@ def parse_header(index, scons_file, src):
 	translation_unit = index.parse(str(scons_file), args=['-Isrc', f'-I{src}'], unsaved_files=[(str(scons_file), file)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
-		raise Exception("Error: Failed to parse the translation unit!")
+		raise Exception("{str(scons_file)}: failed to create translation unit")
 
 	classes = []
 	found_classes = []
@@ -148,7 +139,9 @@ def parse_header(index, scons_file, src):
 
 	def add_class(cursor, macros):
 		if len(macros) > 1:
-			raise Exception(f'Incorrect usage of GCLASS at <{macros[1].location.file.name}>:{macros[1].location.line}:{macros[1].location.column}')
+			raise Exception('{}:{}:{}: error: repeated class macro for a class at {}:{}'
+		       	.format(str(scons_file), macros[1].location.line, macros[1].location.column, macros[1].spelling, cursor.location.line, cursor.location.column))
+
 		
 		for macro in macros:
 			classes.append((cursor, get_macro_args(file, macro)[1], macro.spelling[1:]))
@@ -176,10 +169,9 @@ def parse_header(index, scons_file, src):
 		start, end = cursor.extent.start.offset, cursor.extent.end.offset
 		class_macros = sorted([m for m in macros if start < m.extent.start.offset < end] + child_cursors, key=lambda x: x.extent.start.offset)
 
-		def process_macros(item, macros, properties):
+		def process_macros(item, macros, properties, is_ignored=False):
 			nonlocal group
 			nonlocal subgroup
-			is_ignored = False
 			for macro in macros:
 				if macro.spelling.startswith('GEXPORT_'):
 					properties |= {
@@ -191,15 +183,15 @@ def parse_header(index, scons_file, src):
 				match macro.spelling:
 					case 'GPROPERTY':
 						if item.kind != clang.cindex.CursorKind.FIELD_DECL:
-							raise Exception(f'Incorrect macro usage at {macro.location.line}:{macro.location.column}')
+							raise Exception('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be data member'
+		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
 						args = get_macro_args(file, macro)
 						if len(args) != 2:
-							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
+							raise Exception('{}:{}:{}: error: incorrect {} macro usage: must be 2 arguments'
+		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling))
 					
-						type = item.type.spelling
 						properties |= {
-								'type' : type,
 								'setter' : args[0],
 								'getter' : args[1]
 								}
@@ -218,12 +210,13 @@ def parse_header(index, scons_file, src):
 
 					case 'GBITFIELD':
 						if item.kind != clang.cindex.CursorKind.ENUM_DECL:
-							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
+							raise Exception('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be enum'
+		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
-						# Maybe unneeded
 						if item.type.spelling[-1] == ')':
-							raise Exception(f'Bitfield must be named enum <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}')
-
+								raise Exception('{}:{}:{}: error: enum at {}:{} must be named'
+		       						.format(str(scons_file), macro.location.line, macro.location.column, item.location.line, item.location.column))
+						
 						properties['enum_type'] = 'bitfields'
 
 					case 'GSIGNAL':
@@ -234,14 +227,16 @@ def parse_header(index, scons_file, src):
 
 					case 'GRPC':
 						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
-							raise Exception(f'Incorrect macro usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column} (GRPC only usable with methods)')
+							raise Exception('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
+		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
 						macro_args = get_macro_args(file, macro)
 						rpc_mode, transfer_mode, call_local, channel = None, None, None, None
 
 						if len(macro_args) != 0 and macro_args[-1].isnumeric():
 							if len(macro_args) < 3:
-								raise Exception(f'Channel id must come with explicit rpc_mode and transfer_mode (at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column})')
+								raise Exception('{}:{}:{}: error: channel id must come with explicit rpc_mode and transfer_mode'
+			       					.format(str(scons_file), macro.location.line, macro.location.column))
 
 							parse_args = macro_args[:-1]
 							channel = macro_args[-1]
@@ -251,14 +246,23 @@ def parse_header(index, scons_file, src):
 						for arg in macro_args:
 							match arg:
 								case ('any_peer' | 'authority') as mode:
-									rpc_mode = mode.upper() if rpc_mode == None else Raise(Exception(f'Duplicate rpc mode keyword usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}'))
+									rpc_mode = mode.upper() if rpc_mode == None else Raise(
+									Exception('{}:{}:{}: error: duplicate rpc mode keyword usage'
+		       							.format(str(scons_file), macro.location.line, macro.location.column)))
+
 
 								case ('reliable' | 'unreliable' | 'unreliable_ordered') as mode:
-									transfer_mode = mode.upper() if transfer_mode == None else Raise(Exception(f'Duplicate transfer mode keyword usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}'))
+									transfer_mode = mode.upper() if transfer_mode == None else Raise(
+									Exception('{}:{}:{}: error: duplicate transfer mode keyword usage'
+		       							.format(str(scons_file), macro.location.line, macro.location.column)))
+
 
 								case ('call_local' | 'call_remote') as mode:
 									mode = 'true' if mode == 'call_local' else 'false'
-									call_local = mode if call_local == None else Raise(Exception(f'Duplicate call_local keyword usage at <{macro.location.file.name}>:{macro.location.line}:{macro.location.column}'))
+									call_local = mode if call_local == None else Raise(
+									Exception('{}:{}:{}: error: duplicate call mode keyword usage'
+		       							.format(str(scons_file), macro.location.line, macro.location.column)))
+
 
 						rpc_config = {	'rpc_mode' : 'RPC_MODE_' + rpc_mode if rpc_mode != None else 'RPC_MODE_AUTHORITY',
 								'transfer_mode' : 'TRANSFER_MODE_' + transfer_mode if transfer_mode != None else 'TRANSFER_MODE_UNRELIABLE',
@@ -268,6 +272,10 @@ def parse_header(index, scons_file, src):
 						properties['rpc_config'] = rpc_config 
 
 					case 'GVARARG':
+						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
+							raise Exception('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
+		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
+
 						varargs = get_pair_arglist(get_macro_args(file, macro), 'Variant')
 						properties['is_vararg'] = True
 						properties['args'] = varargs
@@ -317,40 +325,41 @@ def parse_header(index, scons_file, src):
 						'name' : '',
 						'group' : '',
 						'subgroup' : '',
-						'type' : '',
 						'setter' : '',
 						'getter' : '',
 						'hint' : 'PROPERTY_HINT_NONE',
 						'hint_string' : '',
 						'is_static' : item.is_static_method()
 						}
-					if process_macros(item, macros, properties):
+					if process_macros(item, macros, properties, True):
+						properties |= { 'name': item.spelling,
+								'group' : "" if group == "" else group.lower().replace(" ", "") + "_",
+								'subgroup' : "" if subgroup == "" else subgroup.lower().replace(" ", "") + "_"
+								}
 
-						if properties['type'] != '':
-							properties |= { 'name': item.spelling,
-									'group' : "" if group == "" else group.lower().replace(" ", "") + "_",
-									'subgroup' : "" if subgroup == "" else subgroup.lower().replace(" ", "") + "_"
-									}
-
-							class_defs['properties'].append(properties)
+						class_defs['properties'].append(properties)
 
 			return item
 
 						
-		collapse_list(class_macros, lambda x: x.kind != clang.cindex.CursorKind.MACRO_INSTANTIATION, apply_macros)
+		leftover = collapse_list(class_macros, lambda x: x.kind != clang.cindex.CursorKind.MACRO_INSTANTIATION, apply_macros)
+		if leftover != []:
+			raise Exception('{}:{}:{}: error: macro without target member'
+		   	.format(str(scons_file), leftover[0].location.line, leftover[0].location.column))
+
 		parsed_classes[cursor.spelling] = class_defs
 
 	return parsed_classes
 
 
-def write_register_header(defs, new_list, src, target):		
+def write_register_header(defs, src, target):		
 	scripts_header = ''
 	header_register = 'inline void register_script_classes() {\n'
 	header_defs = ''
 
 	for file, classes in defs.items():
 		if len(classes) != 0:
-			scripts_header += f'#include <{os.path.relpath(file, src)}>\n'
+			scripts_header += '#include <{}>\n'.format(os.path.relpath(file, src).replace('\\', '/'))
 
 		for class_name, content in classes.items():
 			header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
