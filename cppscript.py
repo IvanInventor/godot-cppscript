@@ -27,7 +27,7 @@ def generate_header(target, source, env):
 
 
 def generate_header_emitter(target, source, env):
-	return env.File('src/scripts.gen.h'), source
+	return env.File(env['gen_header']), source
 
 def collapse_list(list, key, action):
 	tail = 0
@@ -81,6 +81,13 @@ def get_macro_body(file, macro):
 	return str_from_file(file, macro.extent.start.offset + len(macro.spelling) + 1, macro.extent.end.offset - 1)
 
 
+def GlobRecursive(path, pattern, **kwargs):
+	found = []
+	for root, dirs, files in os.walk(path):
+		found += Glob(root + '/' + pattern, **kwargs)
+	
+	return found
+
 
 MACRO_ARGS_REGEX = r',\s*(?![^{}]*\}|[^<>]*>|[^\(\)]*\))'
 def get_macro_args(file, macro):
@@ -90,7 +97,7 @@ def get_macro_args(file, macro):
 # Builder
 def parse_header(index, scons_file, src):
 	file = scons_file.get_text_contents()
-	translation_unit = index.parse(str(scons_file), args=['-Isrc', f'-I{src}'], unsaved_files=[(str(scons_file), file)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+	translation_unit = index.parse(str(scons_file), args=[f'-I{src}', '-Isrc'], unsaved_files=[(str(scons_file), file)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
 		raise Exception("{str(scons_file)}: failed to create translation unit")
