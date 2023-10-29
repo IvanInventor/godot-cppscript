@@ -202,6 +202,7 @@ def parse_header(index, scons_file, src):
 								'setter' : args[0],
 								'getter' : args[1]
 								}
+						is_ignored = False
 
 					case 'GGROUP':
 						group = get_macro_body(file, macro)
