@@ -369,7 +369,7 @@ def write_register_header(defs, src, target):
 		for class_name, content in classes.items():
 			Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', '', ''
 			outside_bind = ''
-			header_rpc_config = f'void {class_name}::_rpc_config() {{\n'
+			header_rpc_config = ''
 			methods_list = [method['bind_name'] for method in content['methods']]
 			
 			for group, name in content['groups']:
@@ -435,9 +435,9 @@ def write_register_header(defs, src, target):
 			for const in content['constants']:
 				Hconst += f'	BIND_CONSTANT({const});\n'
 
-			header_rpc_config += '}\n'
+			header_rpc_config = f'void {class_name}::_rpc_config() {{' + ('' if header_rpc_config == '' else '\n') + header_rpc_config + '}\n\n'
 			bind_array = [i for i in [Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '']
-			header_defs += outside_bind + f'void {class_name}::_bind_methods() {{\n' + '\n'.join(bind_array) + '}\n\n' + header_rpc_config
+			header_defs += outside_bind + f'void {class_name}::_bind_methods() {{' + ''.join(['\n' + i for i in bind_array]) + '}\n\n' + header_rpc_config
 
 	scripts_header += '\nusing namespace godot;\n\n'
 	scripts_header += header_register + '}\n\n'
