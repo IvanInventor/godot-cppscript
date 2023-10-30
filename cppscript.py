@@ -19,7 +19,7 @@ def generate_header(target, source, env):
 
 		write_register_header(new_defs, env['src'], str(target[0]))
 		
-		with open('defs.json', 'w') as file:
+		with open(env['defs_file'], 'w') as file:
 			json.dump(new_defs, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
 
 	except Exception as e:

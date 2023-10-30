@@ -9,6 +9,7 @@ env = SConscript('godot-cpp/SConstruct')
 env.Append(CPPPATH=[SRC_DIR, 'src'])
 env['src'] = SRC_DIR
 env['gen_header'] = 'src/scripts.gen.h'
+env['defs_file'] = 'src/defs.json'
 
 sources = GlobRecursive(SRC_DIR, '*.cpp') + Glob('src/register_types.cpp')
 scripts = GlobRecursive(SRC_DIR, '*.hpp')
@@ -34,6 +35,4 @@ else:
         source=sources,
     )
 
-env.Ignore(library, env['gen_header'])
-env.Depends(sources, cpp)
 Default(library)
