@@ -1,6 +1,7 @@
 from SCons.Script import *
 import clang.cindex
-import os, sys, re, json
+import pcpp
+import os, sys, json
 
 
 
@@ -89,10 +90,11 @@ def GlobRecursive(path, pattern, **kwargs):
 	return found
 
 
-MACRO_ARGS_REGEX = r',\s*(?![^{}]*\}|[^<>]*>|[^\(\)]*\))'
 def get_macro_args(file, macro):
-	array = [i.strip() for i in re.split(MACRO_ARGS_REGEX, get_macro_body(file, macro))]
-	return array if array != [''] else []
+	p = pcpp.Preprocessor()
+	n, args, pos = p.collect_args(list(p.parsegen(str_from_file(file, macro.extent.start.offset + len(macro.spelling), macro.extent.end.offset))))
+	return [''.join([i.value for i in arg]) for arg in args]
+
  
 # Builder
 def parse_header(index, scons_file, src):
@@ -128,9 +130,6 @@ def parse_header(index, scons_file, src):
 
 			case clang.cindex.CursorKind.MACRO_INSTANTIATION:
 				if cursor.spelling in KEYWORDS:
-					macros.append(cursor)
-				
-				elif cursor.spelling.startswith('GEXPORT_'):
 					macros.append(cursor)
 					
 				elif cursor.spelling in ['GCLASS', 'GVIRTUAL_CLASS', 'GABSTRACT_CLASS']:
@@ -180,13 +179,6 @@ def parse_header(index, scons_file, src):
 			nonlocal group
 			nonlocal subgroup
 			for macro in macros:
-				if macro.spelling.startswith('GEXPORT_'):
-					properties |= {
-						'hint' : 'PROPERTY_HINT_' + macro.spelling[8:],
-						'hint_string' : get_macro_body(file, macro)
-						}
-					continue
-
 				match macro.spelling:
 					case 'GPROPERTY':
 						if item.kind != clang.cindex.CursorKind.FIELD_DECL:
@@ -194,13 +186,15 @@ def parse_header(index, scons_file, src):
 		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
 						args = get_macro_args(file, macro)
-						if len(args) != 2:
-							raise Exception('{}:{}:{}: error: incorrect {} macro usage: must be 2 arguments'
+						if len(args) < 2:
+							raise Exception('{}:{}:{}: error: incorrect {} macro usage: must be at least 2 arguments: setter and getter'
 		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling))
 					
 						properties |= {
 								'setter' : args[0],
-								'getter' : args[1]
+								'getter' : args[1],
+								'hint' : 'PROPERTY_HINT_' + args[2].upper() if len(args) > 2 else 'PROPERTY_HINT_NONE',
+								'hint_string' : args[3] if len(args) > 3 else '""'
 								}
 						is_ignored = False
 
@@ -416,7 +410,7 @@ def write_register_header(defs, src, target):
 
 			for prop in content['properties']:
 				prop_name = prop['group'] + prop['subgroup'] + prop['name']
-				Hprop += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({class_name}::{prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, "{prop["hint_string"]}"), "{prop["setter"]}", "{prop["getter"]}");\n'
+				Hprop += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({class_name}::{prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, {prop["hint_string"]}), "{prop["setter"]}", "{prop["getter"]}");\n'
 
 				if prop['getter'] not in methods_list:
 					Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::_cppscript_getter<&{class_name}::{prop["name"]}, decltype({class_name}::{prop["name"]})>);\n'
