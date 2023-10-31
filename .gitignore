@@ -3,8 +3,9 @@
 *.os
 *.o
 
-# Script headers
+# Generated files
 *scripts.gen.h
+*defs.json
 
 # Scons specific
 *.sconsign.dblite

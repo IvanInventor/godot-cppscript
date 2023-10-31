@@ -9,6 +9,10 @@ KEYWORDS = ['GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GBITFIELD', 'GSIGNAL', 'GRPC', 
 VIRTUAL_METHODS = ['_enter_tree', '_exit_tree', '_input', '_unhandled_input', '_unhandled_key_input', '_process', '_physics_process']
 
 # Helpers
+class CppScriptException(Exception):
+	pass
+
+
 def generate_header(target, source, env):
 	try:
 		sourcesigs, sources = target[0].get_stored_info().binfo.bsourcesigs, target[0].get_stored_info().binfo.bsources
@@ -22,7 +26,7 @@ def generate_header(target, source, env):
 		with open(env['defs_file'], 'w') as file:
 			json.dump(new_defs, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
 
-	except Exception as e:
+	except CppScriptException as e:
 		print(f'\n{e}\n', file=sys.stderr)
 		return 1
 
@@ -62,10 +66,7 @@ def find_default_arg(file, arg):
 def load_defs_json(path):
 	try:
 		with open(path, 'r') as file:
-			defs = json.load(file)
-			defs['groups'] = set(defs['groups'])
-			defs['subgroups'] = set(defs['subgroups'])
-			return defs
+			return json.load(file)
 	except Exception:
 		return {}
 
@@ -95,6 +96,10 @@ def get_macro_args(file, macro):
 	n, args, pos = p.collect_args(list(p.parsegen(str_from_file(file, macro.extent.start.offset + len(macro.spelling), macro.extent.end.offset))))
 	return [''.join([i.value for i in arg]) for arg in args]
 
+
+def group_name(name):
+	return '' if name == '' else (name.lower().replace(" ", "") + "_")
+
  
 # Builder
 def parse_header(index, scons_file, src):
@@ -102,7 +107,7 @@ def parse_header(index, scons_file, src):
 	translation_unit = index.parse(str(scons_file), args=[f'-I{src}', '-Isrc'], unsaved_files=[(str(scons_file), file)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
-		raise Exception("{str(scons_file)}: failed to create translation unit")
+		raise CppScriptException("{str(scons_file)}: failed to create translation unit")
 
 	classes = []
 	found_classes = []
@@ -145,7 +150,7 @@ def parse_header(index, scons_file, src):
 
 	def add_class(cursor, macros):
 		if len(macros) > 1:
-			raise Exception('{}:{}:{}: error: repeated class macro for a class at {}:{}'
+			raise CppScriptException('{}:{}:{}: error: repeated class macro for a class at {}:{}'
 		       	.format(str(scons_file), macros[1].location.line, macros[1].location.column, macros[1].spelling, cursor.location.line, cursor.location.column))
 
 		
@@ -163,8 +168,6 @@ def parse_header(index, scons_file, src):
 			'methods' : [],
 			'properties' : [],
 			'signals' : [],
-			'groups' : set(),
-			'subgroups' : set(),
 			'enum_constants' : {},
 			'constants' : [],
 			'bitfields' : {}
@@ -182,12 +185,12 @@ def parse_header(index, scons_file, src):
 				match macro.spelling:
 					case 'GPROPERTY':
 						if item.kind != clang.cindex.CursorKind.FIELD_DECL:
-							raise Exception('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be data member'
+							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be data member'
 		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
 						args = get_macro_args(file, macro)
 						if len(args) < 2:
-							raise Exception('{}:{}:{}: error: incorrect {} macro usage: must be at least 2 arguments: setter and getter'
+							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage: must be at least 2 arguments: setter and getter'
 		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling))
 					
 						properties |= {
@@ -200,23 +203,18 @@ def parse_header(index, scons_file, src):
 
 					case 'GGROUP':
 						group = get_macro_body(file, macro)
-						if group != '':
-							class_defs['groups'].add((group, group.lower().replace(" ", "") + "_"))
 						subgroup = ''
 
 					case 'GSUBGROUP':
 						subgroup = get_macro_body(file, macro)
-						if subgroup != '':
-							class_defs['subgroups'].add((subgroup, group.lower().replace(" ", "") + "_" + subgroup.lower().replace(" ", "") + "_"))
-
 
 					case 'GBITFIELD':
 						if item.kind != clang.cindex.CursorKind.ENUM_DECL:
-							raise Exception('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be enum'
+							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be enum'
 		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
 						if item.type.spelling[-1] == ')':
-								raise Exception('{}:{}:{}: error: enum at {}:{} must be named'
+								raise CppScriptException('{}:{}:{}: error: enum at {}:{} must be named'
 		       						.format(str(scons_file), macro.location.line, macro.location.column, item.location.line, item.location.column))
 						
 						properties['enum_type'] = 'bitfields'
@@ -229,7 +227,7 @@ def parse_header(index, scons_file, src):
 
 					case 'GRPC':
 						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
-							raise Exception('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
+							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
 		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
 						macro_args = get_macro_args(file, macro)
@@ -237,7 +235,7 @@ def parse_header(index, scons_file, src):
 
 						if len(macro_args) != 0 and macro_args[-1].isnumeric():
 							if len(macro_args) < 3:
-								raise Exception('{}:{}:{}: error: channel id must come with explicit rpc_mode and transfer_mode'
+								raise CppScriptException('{}:{}:{}: error: channel id must come with explicit rpc_mode and transfer_mode'
 			       					.format(str(scons_file), macro.location.line, macro.location.column))
 
 							parse_args = macro_args[:-1]
@@ -249,20 +247,20 @@ def parse_header(index, scons_file, src):
 							match arg:
 								case ('any_peer' | 'authority') as mode:
 									rpc_mode = mode.upper() if rpc_mode == None else Raise(
-									Exception('{}:{}:{}: error: duplicate rpc mode keyword usage'
+									CppScriptException('{}:{}:{}: error: duplicate rpc mode keyword usage'
 		       							.format(str(scons_file), macro.location.line, macro.location.column)))
 
 
 								case ('reliable' | 'unreliable' | 'unreliable_ordered') as mode:
 									transfer_mode = mode.upper() if transfer_mode == None else Raise(
-									Exception('{}:{}:{}: error: duplicate transfer mode keyword usage'
+									CppScriptException('{}:{}:{}: error: duplicate transfer mode keyword usage'
 		       							.format(str(scons_file), macro.location.line, macro.location.column)))
 
 
 								case ('call_local' | 'call_remote') as mode:
 									mode = 'true' if mode == 'call_local' else 'false'
 									call_local = mode if call_local == None else Raise(
-									Exception('{}:{}:{}: error: duplicate call mode keyword usage'
+									CppScriptException('{}:{}:{}: error: duplicate call mode keyword usage'
 		       							.format(str(scons_file), macro.location.line, macro.location.column)))
 
 
@@ -275,7 +273,7 @@ def parse_header(index, scons_file, src):
 
 					case 'GVARARG':
 						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
-							raise Exception('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
+							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
 		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
 						varargs = get_pair_arglist(get_macro_args(file, macro), 'Variant')
@@ -335,8 +333,8 @@ def parse_header(index, scons_file, src):
 						}
 					if process_macros(item, macros, properties, True):
 						properties |= { 'name': item.spelling,
-								'group' : "" if group == "" else group.lower().replace(" ", "") + "_",
-								'subgroup' : "" if subgroup == "" else subgroup.lower().replace(" ", "") + "_"
+								'group' : group,
+								'subgroup' : subgroup
 								}
 
 						class_defs['properties'].append(properties)
@@ -346,7 +344,7 @@ def parse_header(index, scons_file, src):
 						
 		leftover = collapse_list(class_macros, lambda x: x.kind != clang.cindex.CursorKind.MACRO_INSTANTIATION, apply_macros)
 		if leftover != []:
-			raise Exception('{}:{}:{}: error: macro without target member'
+			raise CppScriptException('{}:{}:{}: error: macro without target member'
 		   	.format(str(scons_file), leftover[0].location.line, leftover[0].location.column))
 
 		parsed_classes[cursor.spelling] = class_defs
@@ -367,16 +365,10 @@ def write_register_header(defs, src, target):
 			header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
 
 		for class_name, content in classes.items():
-			Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', '', ''
+			Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', ''
 			outside_bind = ''
 			header_rpc_config = ''
 			methods_list = [method['bind_name'] for method in content['methods']]
-			
-			for group, name in content['groups']:
-				Hgroup += f'	ADD_GROUP("{group}", "{name}");\n'
-
-			for subgroup, name in content['subgroups']:
-				Hsubgroup += f'	ADD_SUBGROUP("{subgroup}", "{name}");\n'
 
 			for method in content['methods']:
 				if not method['is_vararg']:
@@ -407,16 +399,27 @@ def write_register_header(defs, src, target):
 		ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "{method["bind_name"]}", &{class_name}::{method["name"]}, mi);
 	}}
 """
-
+			prev_group, prev_subgroup = '', ''
 			for prop in content['properties']:
-				prop_name = prop['group'] + prop['subgroup'] + prop['name']
-				Hprop += f'	ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({class_name}::{prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, {prop["hint_string"]}), "{prop["setter"]}", "{prop["getter"]}");\n'
-
 				if prop['getter'] not in methods_list:
 					Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::_cppscript_getter<&{class_name}::{prop["name"]}>);\n'
 
 				if prop['setter'] not in methods_list:
 					Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::_cppscript_setter<&{class_name}::{prop["name"]}>);\n'
+
+				group, subgroup = prop['group'], prop['subgroup']
+				group_ = group_name(group)
+				if group != '' and group != prev_group:
+					Hprop += f'	ADD_GROUP("{group}", "{group_}");\n'
+					prev_group = group
+
+				subgroup_ = group_name(subgroup)
+				if subgroup != '' and subgroup != prev_subgroup:
+					Hprop += f'	ADD_SUBGROUP("{subgroup}", "{group_}{subgroup_}");\n'
+					prev_subgroup = subgroup
+
+				prop_name = group_ + subgroup_ + prop['name']
+				Hprop += f'		ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({class_name}::{prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, {prop["hint_string"]}), "{prop["setter"]}", "{prop["getter"]}");\n'
 
 			for signal_name, args in content['signals']:
 				args_str = ''.join([f', PropertyInfo(GetTypeInfo<{arg_type if arg_type != "" else "Variant"}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args])
@@ -436,8 +439,8 @@ def write_register_header(defs, src, target):
 				Hconst += f'	BIND_CONSTANT({const});\n'
 
 			header_rpc_config = f'void {class_name}::_rpc_config() {{' + ('' if header_rpc_config == '' else '\n') + header_rpc_config + '}\n\n'
-			bind_array = [i for i in [Hgroup, Hsubgroup, Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '']
-			header_defs += outside_bind + f'void {class_name}::_bind_methods() {{' + ''.join(['\n' + i for i in bind_array]) + '}\n\n' + header_rpc_config
+			bind_array = [i for i in [Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '']
+			header_defs += outside_bind + f'void {class_name}::_bind_methods() {{' + ''.join(['\n\n' + i for i in bind_array]) + '}\n\n' + header_rpc_config
 
 	scripts_header += '\nusing namespace godot;\n\n'
 	scripts_header += header_register + '}\n\n'
