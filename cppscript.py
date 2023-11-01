@@ -14,15 +14,19 @@ class CppScriptException(Exception):
 
 
 def generate_header(target, source, env):
+	index = clang.cindex.Index.create()
 	try:
 		sourcesigs, sources = target[0].get_stored_info().binfo.bsourcesigs, target[0].get_stored_info().binfo.bsources
-		cached_defs = load_defs_json('defs.json')
-		index = clang.cindex.Index.create()
+		cached_defs = load_defs_json(env['defs_file'])
 
 		new_defs = {str(s) : (cached_defs[str(s)] if str(s) in sources and s.get_csig() == sourcesigs[sources.index(str(s))].csig and str(s) in cached_defs.keys() else parse_header(index, s, env['src'])) for s in source}
 
+	except AttributeError:
+		new_defs = {str(s) : parse_header(index, s, env['src']) for s in source}
+
+	try:
 		write_register_header(new_defs, env['src'], str(target[0]))
-		
+
 		with open(env['defs_file'], 'w') as file:
 			json.dump(new_defs, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
 
