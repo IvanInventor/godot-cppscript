@@ -343,9 +343,12 @@ def parse_header(index, scons_file, src):
 
 						
 		leftover = collapse_list(class_macros, lambda x: x.kind != clang.cindex.CursorKind.MACRO_INSTANTIATION, apply_macros)
-		if leftover != []:
-			raise CppScriptException('{}:{}:{}: error: macro without target member'
-		   	.format(str(scons_file), leftover[0].location.line, leftover[0].location.column))
+		for macro in leftover:
+			if macro.spelling not in ['GSIGNAL', 'GGROUP', 'GSUBGROUP']:
+				raise CppScriptException('{}:{}:{}: error: macro without target member'
+		   		.format(str(scons_file), macro.location.line, macro.location.column))
+		process_macros(None, leftover, None)
+
 
 		parsed_classes[cursor.spelling] = class_defs
 
