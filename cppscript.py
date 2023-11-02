@@ -297,9 +297,7 @@ def parse_header(index, scons_file, src, auto_methods):
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
 		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
-						varargs = get_pair_arglist(get_macro_args(file, macro), 'Variant')
-						properties['is_vararg'] = True
-						properties['args'] = varargs
+						properties['varargs'] = get_pair_arglist(get_macro_args(file, macro), 'Variant')
 					
 					case 'GIGNORE':
 						is_ignored = True
@@ -314,21 +312,16 @@ def parse_header(index, scons_file, src, auto_methods):
 			match item.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
 					if item.spelling not in VIRTUAL_METHODS and not item.is_virtual_method(): # Do not register virtual temporary
-						properties = {
-							'name' : item.spelling,
-							'bind_name' : item.spelling,
-							'return' : item.result_type.spelling,
-							# Must be a better way of getting default method arguments
-							'args' : [(arg.type.spelling, arg.spelling, find_default_arg(file, arg)) for arg in item.get_arguments()],
-							'is_static' : item.is_static_method(),
-							'is_vararg': False,
-							'rpc_config' : None
-							}
-
+						properties = {}
 						if process_macros(item, macros, properties, not auto_methods):
-
-							if properties != None:
-								class_defs['methods'].append(properties)
+							properties |= {	'name' : item.spelling,
+									'bind_name' : item.spelling,
+									'return' : item.result_type.spelling,
+		      							'args' : [(arg.type.spelling, arg.spelling, find_default_arg(file, arg)) for arg in item.get_arguments()],
+									# Must be a better way of getting default method arguments
+									'is_static' : item.is_static_method(),
+									}
+							class_defs['methods'].append(properties)
 
 				case clang.cindex.CursorKind.ENUM_DECL:
 					properties = {'enum_type' : 'enum_constants'}
@@ -342,20 +335,12 @@ def parse_header(index, scons_file, src, auto_methods):
 							class_defs['constants'] += properties['list']
 
 				case clang.cindex.CursorKind.FIELD_DECL:
-					properties = {
-						'name' : '',
-						'group' : '',
-						'subgroup' : '',
-						'setter' : '',
-						'getter' : '',
-						'hint' : 'PROPERTY_HINT_NONE',
-						'hint_string' : '',
-						'is_static' : item.is_static_method()
-						}
+					properties = {}
 					if process_macros(item, macros, properties, True):
 						properties |= { 'name': item.spelling,
 								'group' : group,
-								'subgroup' : subgroup
+								'subgroup' : subgroup,
+		     						'is_static' : item.is_static_method()
 								}
 
 						class_defs['properties'].append(properties)
@@ -395,7 +380,7 @@ def write_register_header(defs, src, target):
 			methods_list = [method['bind_name'] for method in content['methods']]
 
 			for method in content['methods']:
-				if not method['is_vararg']:
+				if 'varargs' not in method.keys():
 					args = ''.join([f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args']])
 					defvals = ''.join([f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != ''])
 					if method['is_static']:
@@ -403,7 +388,7 @@ def write_register_header(defs, src, target):
 					else:
 						Hmethod += f'	ClassDB::bind_method(D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
 
-					if method['rpc_config'] != None:
+					if 'rpc_config' in method.keys():
 						header_rpc_config += f"""	{{
 		Dictionary opts;
 		opts["rpc_mode"] = MultiplayerAPI::{method['rpc_config']['rpc_mode']};
@@ -414,7 +399,7 @@ def write_register_header(defs, src, target):
 	}}
 """
 				else:
-					args_list = '\n'.join([f'		mi.arguments.push_back(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"));' for type, name in method['args']])
+					args_list = '\n'.join([f'		mi.arguments.push_back(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"));' for type, name in method['varargs']])
 
 					Hvaragr_method += f"""	{{
 		MethodInfo mi;
