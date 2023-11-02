@@ -5,38 +5,13 @@ import os, sys, json
 
 
 
-KEYWORDS = ['GPROPERTY', 'GGROUP', 'GSUBGROUP', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE']
+KEYWORDS = ['GPROPERTY', 'GMETHOD', 'GGROUP', 'GSUBGROUP', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE']
 VIRTUAL_METHODS = ['_enter_tree', '_exit_tree', '_input', '_unhandled_input', '_unhandled_key_input', '_process', '_physics_process']
 
 # Helpers
 class CppScriptException(Exception):
 	pass
 
-
-def generate_header(target, source, env):
-	index = clang.cindex.Index.create()
-	try:
-		sourcesigs, sources = target[0].get_stored_info().binfo.bsourcesigs, target[0].get_stored_info().binfo.bsources
-		cached_defs = load_defs_json(env['defs_file'])
-
-		new_defs = {str(s) : (cached_defs[str(s)] if str(s) in sources and s.get_csig() == sourcesigs[sources.index(str(s))].csig and str(s) in cached_defs.keys() else parse_header(index, s, env['src'])) for s in source}
-
-	except AttributeError:
-		new_defs = {str(s) : parse_header(index, s, env['src']) for s in source}
-
-	try:
-		write_register_header(new_defs, env['src'], str(target[0]))
-
-		with open(env['defs_file'], 'w') as file:
-			json.dump(new_defs, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
-
-	except CppScriptException as e:
-		print(f'\n{e}\n', file=sys.stderr)
-		return 1
-
-
-def generate_header_emitter(target, source, env):
-	return env.File(env['gen_header']), source
 
 def collapse_list(list, key, action):
 	tail = 0
@@ -75,10 +50,6 @@ def load_defs_json(path):
 		return {}
 
 
-def Raise(e):
-	raise e
-
-
 def str_from_file(file, start, end):
 	return file[start:end]
 
@@ -106,7 +77,33 @@ def group_name(name):
 
  
 # Builder
-def parse_header(index, scons_file, src):
+def generate_header_emitter(target, source, env):
+	return env.File(env['gen_header']), source
+
+
+def generate_header(target, source, env):
+	index = clang.cindex.Index.create()
+	try:
+		try:
+			sourcesigs, sources = target[0].get_stored_info().binfo.bsourcesigs, target[0].get_stored_info().binfo.bsources
+			cached_defs = load_defs_json(env['defs_file'])
+
+			new_defs = {str(s) : (cached_defs[str(s)] if str(s) in sources and s.get_csig() == sourcesigs[sources.index(str(s))].csig and str(s) in cached_defs.keys() else parse_header(index, s, env['src'], env['auto_methods'])) for s in source}
+
+		except AttributeError:
+			new_defs = {str(s) : parse_header(index, s, env['src'], env['auto_methods']) for s in source}
+
+		write_register_header(new_defs, env['src'], str(target[0]))
+
+		with open(env['defs_file'], 'w') as file:
+			json.dump(new_defs, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
+
+	except CppScriptException as e:
+		print(f'\n{e}\n', file=sys.stderr)
+		return 1
+
+
+def parse_header(index, scons_file, src, auto_methods):
 	file = scons_file.get_text_contents()
 	translation_unit = index.parse(str(scons_file), args=[f'-I{src}', '-Isrc'], unsaved_files=[(str(scons_file), file)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
@@ -187,6 +184,13 @@ def parse_header(index, scons_file, src):
 			nonlocal subgroup
 			for macro in macros:
 				match macro.spelling:
+					case 'GMETHOD':
+						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
+							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
+		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
+
+						is_ignored = False
+
 					case 'GPROPERTY':
 						if item.kind != clang.cindex.CursorKind.FIELD_DECL:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be data member'
@@ -250,22 +254,25 @@ def parse_header(index, scons_file, src):
 						for arg in macro_args:
 							match arg:
 								case ('any_peer' | 'authority') as mode:
-									rpc_mode = mode.upper() if rpc_mode == None else Raise(
-									CppScriptException('{}:{}:{}: error: duplicate rpc mode keyword usage'
-		       							.format(str(scons_file), macro.location.line, macro.location.column)))
+									if rpc_mode != None:
+										Raise(CppScriptException('{}:{}:{}: error: duplicate rpc mode keyword usage'
+		       								.format(str(scons_file), macro.location.line, macro.location.column)))
+									rpc_mode = mode.upper()
 
 
 								case ('reliable' | 'unreliable' | 'unreliable_ordered') as mode:
-									transfer_mode = mode.upper() if transfer_mode == None else Raise(
-									CppScriptException('{}:{}:{}: error: duplicate transfer mode keyword usage'
-		       							.format(str(scons_file), macro.location.line, macro.location.column)))
+									if transfer_mode != None:
+										Raise(CppScriptException('{}:{}:{}: error: duplicate transfer mode keyword usage'
+		       								.format(str(scons_file), macro.location.line, macro.location.column)))
+									transfer_mode = mode.upper()
 
 
 								case ('call_local' | 'call_remote') as mode:
 									mode = 'true' if mode == 'call_local' else 'false'
-									call_local = mode if call_local == None else Raise(
-									CppScriptException('{}:{}:{}: error: duplicate call mode keyword usage'
-		       							.format(str(scons_file), macro.location.line, macro.location.column)))
+									if call_local != None:
+										Raise(CppScriptException('{}:{}:{}: error: duplicate call mode keyword usage'
+		       								.format(str(scons_file), macro.location.line, macro.location.column)))
+									call_local = mode
 
 
 						rpc_config = {	'rpc_mode' : 'RPC_MODE_' + rpc_mode if rpc_mode != None else 'RPC_MODE_AUTHORITY',
@@ -308,7 +315,7 @@ def parse_header(index, scons_file, src):
 							'rpc_config' : None
 							}
 
-						if process_macros(item, macros, properties):
+						if process_macros(item, macros, properties, not auto_methods):
 
 							if properties != None:
 								class_defs['methods'].append(properties)
