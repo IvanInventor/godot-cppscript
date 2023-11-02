@@ -69,7 +69,8 @@ def GlobRecursive(path, pattern, **kwargs):
 def get_macro_args(file, macro):
 	p = pcpp.Preprocessor()
 	n, args, pos = p.collect_args(list(p.parsegen(str_from_file(file, macro.extent.start.offset + len(macro.spelling), macro.extent.end.offset))))
-	return [''.join([i.value for i in arg]) for arg in args]
+	array = [''.join([i.value for i in arg]) for arg in args]
+	return array if array != [''] else []
 
 
 def group_name(name):
@@ -246,33 +247,42 @@ def parse_header(index, scons_file, src, auto_methods):
 								raise CppScriptException('{}:{}:{}: error: channel id must come with explicit rpc_mode and transfer_mode'
 			       					.format(str(scons_file), macro.location.line, macro.location.column))
 
-							parse_args = macro_args[:-1]
-							channel = macro_args[-1]
-						else:
-							parse_args = macro_args
-
 						for arg in macro_args:
 							match arg:
 								case ('any_peer' | 'authority') as mode:
 									if rpc_mode != None:
-										Raise(CppScriptException('{}:{}:{}: error: duplicate rpc mode keyword usage'
-		       								.format(str(scons_file), macro.location.line, macro.location.column)))
+										raise CppScriptException('{}:{}:{}: error: duplicate rpc mode keyword usage'
+		       								.format(str(scons_file), macro.location.line, macro.location.column)) 
+
 									rpc_mode = mode.upper()
 
 
 								case ('reliable' | 'unreliable' | 'unreliable_ordered') as mode:
 									if transfer_mode != None:
-										Raise(CppScriptException('{}:{}:{}: error: duplicate transfer mode keyword usage'
-		       								.format(str(scons_file), macro.location.line, macro.location.column)))
+										raise CppScriptException('{}:{}:{}: error: duplicate transfer mode keyword usage'
+		       								.format(str(scons_file), macro.location.line, macro.location.column))
+
 									transfer_mode = mode.upper()
 
 
 								case ('call_local' | 'call_remote') as mode:
 									mode = 'true' if mode == 'call_local' else 'false'
 									if call_local != None:
-										Raise(CppScriptException('{}:{}:{}: error: duplicate call mode keyword usage'
-		       								.format(str(scons_file), macro.location.line, macro.location.column)))
+										raise CppScriptException('{}:{}:{}: error: duplicate call mode keyword usage'
+		       								.format(str(scons_file), macro.location.line, macro.location.column))
+
 									call_local = mode
+
+								case _:
+									if not arg.isnumeric():
+										raise CppScriptException('{}:{}:{}: error: "{}" is not a keyword or channel id'
+		       								.format(str(scons_file), macro.location.line, macro.location.column, arg))
+
+									if channel != None:
+										raise CppScriptException('{}:{}:{}: error: duplicate channel id usage'
+		       								.format(str(scons_file), macro.location.line, macro.location.column))
+
+									channel = arg
 
 
 						rpc_config = {	'rpc_mode' : 'RPC_MODE_' + rpc_mode if rpc_mode != None else 'RPC_MODE_AUTHORITY',
