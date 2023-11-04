@@ -66,6 +66,8 @@ def GlobRecursive(path, pattern, **kwargs):
 	for root, dirs, files in os.walk(path):
 		if not os.path.basename(root).startswith('.'):
 			found += Glob(root + '/' + pattern, **kwargs)
+		else:
+			dirs[:] = []
 	
 	return found
 
