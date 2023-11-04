@@ -23,18 +23,19 @@ csb = Builder(
 
 env.Append(BUILDERS={'CppScript' : csb})
 
-cpp = env.CppScript(scripts)
+header, *bindings = env.CppScript(scripts)
+
 if env["platform"] == "macos":
     library = env.SharedLibrary(
         "../bin/lib{}.{}.{}.framework/lib{}.{}.{}".format(
             library_name, env["platform"], env["target"], library_name, env["platform"], env["target"]
         ),
-        source=sources,
+	source=sources + bindings,
     )
 else:
     library = env.SharedLibrary(
         "../bin/lib{}{}{}".format(library_name, env["suffix"], env["SHLIBSUFFIX"]),
-        source=sources,
+        source=sources + bindings,
     )
 
 Default(library)
