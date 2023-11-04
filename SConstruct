@@ -4,7 +4,7 @@ import os
 SRC_DIR = '../src'
 library_name = 'scripts'
 
-env = SConscript('godot-cpp/SConstruct')
+env = SConscript('godot-cpp/SConstruct').Clone()
 
 env.Append(CPPPATH=[SRC_DIR, 'src'])		# CppScript config
 env['src'] = SRC_DIR				# Path to C++ source files
@@ -13,7 +13,7 @@ env['gen_header'] = 'src/scripts.gen.h'		# Path to generated header
 env['auto_methods'] = True			# Generate bindings to public methods automatically
 						# Or require GMETHOD() before methods
 
-sources = GlobRecursive(SRC_DIR, '*.cpp') + Glob('src/register_types.cpp')
+sources = GlobRecursive(SRC_DIR, '*.cpp') + [env.File('src/register_types.cpp')]
 scripts = GlobRecursive(SRC_DIR, '*.hpp')
 
 csb = Builder(
