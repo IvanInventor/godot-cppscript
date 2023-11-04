@@ -73,7 +73,7 @@ def GlobRecursive(path, pattern, **kwargs):
 def get_macro_args(file, macro):
 	p = pcpp.Preprocessor()
 	n, args, pos = p.collect_args(list(p.parsegen(str_from_file(file, macro.extent.start.offset + len(macro.spelling), macro.extent.end.offset))))
-	array = [''.join([i.value for i in arg]) for arg in args]
+	array = [''.join(i.value for i in arg) for arg in args]
 	return array if array != [''] else []
 
 
@@ -93,10 +93,10 @@ def generate_header(target, source, env):
 			sourcesigs, sources = target[0].get_stored_info().binfo.bsourcesigs, target[0].get_stored_info().binfo.bsources
 			cached_defs = load_defs_json(env['defs_file'])
 
-			new_defs = {str(s) : (cached_defs[str(s)] if str(s) in sources and s.get_csig() == sourcesigs[sources.index(str(s))].csig and str(s) in cached_defs.keys() else parse_header(index, s, env['src'], env['auto_methods'])) for s in source}
+			new_defs = {str(s) : (cached_defs[str(s)] if str(s) in sources and s.get_csig() == sourcesigs[sources.index(str(s))].csig and str(s) in cached_defs.keys() else parse_and_write_header(index, s, env['src'], env['auto_methods'])) for s in source}
 
 		except AttributeError:
-			new_defs = {str(s) : parse_header(index, s, env['src'], env['auto_methods']) for s in source}
+			new_defs = {str(s) : parse_and_write_header(index, s, env['src'], env['auto_methods']) for s in source}
 
 		write_register_header(new_defs, env['src'], str(target[0]))
 
@@ -365,102 +365,116 @@ def parse_header(index, scons_file, src, auto_methods):
 	return parsed_classes
 
 
+def parse_and_write_header(index, scons_file, src, auto_methods):
+	defs = parse_header(index, scons_file, src, auto_methods)
+	write_header(str(scons_file), defs, src)
+	return defs
+
+
+def write_header(file, defs, src):
+	header_defs = []
+	for class_name, content in defs.items():
+		Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', ''
+		outside_bind = ''
+		header_rpc_config = ''
+		methods_list = [method['bind_name'] for method in content['methods']]
+
+		for method in content['methods']:
+			if 'varargs' not in method.keys():
+				args = ''.join(f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args'])
+				defvals = ''.join(f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != '')
+				if method['is_static']:
+					Hstatic_method += f'	ClassDB::bind_static_method("{class_name}", D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
+				else:
+					Hmethod += f'	ClassDB::bind_method(D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
+
+				if 'rpc_config' in method.keys():
+					header_rpc_config += f"""	{{
+	Dictionary opts;
+	opts["rpc_mode"] = MultiplayerAPI::{method['rpc_config']['rpc_mode']};
+	opts["transfer_mode"] = MultiplayerPeer::{method['rpc_config']['transfer_mode']};
+	opts["call_local"] = {method['rpc_config']['call_local']};
+	opts["channel"] = {method['rpc_config']['channel']};
+	rpc_config("{method["name"]}", opts);
+	}}
+"""
+			else:
+				args_list = '\n'.join(f'	mi.arguments.push_back(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"));' for type, name in method['varargs'])
+
+				Hvaragr_method += f"""	{{
+	MethodInfo mi;
+	mi.name = "{method["name"]}";
+""" + args_list + f"""
+	ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "{method["bind_name"]}", &{class_name}::{method["name"]}, mi);
+	}}
+"""
+		prev_group, prev_subgroup = '', ''
+		for prop in content['properties']:
+			if prop['getter'] not in methods_list:
+				Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::_cppscript_getter<&{class_name}::{prop["name"]}>);\n'
+
+			if prop['setter'] not in methods_list:
+				Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::_cppscript_setter<&{class_name}::{prop["name"]}>);\n'
+
+			group, subgroup = prop['group'], prop['subgroup']
+			group_ = group_name(group)
+			if group != '' and group != prev_group:
+				Hprop += f'	ADD_GROUP("{group}", "{group_}");\n'
+				prev_group = group
+
+			subgroup_ = group_name(subgroup)
+			if subgroup != '' and subgroup != prev_subgroup:
+				Hprop += f'	ADD_SUBGROUP("{subgroup}", "{group_}{subgroup_}");\n'
+				prev_subgroup = subgroup
+
+			prop_name = group_ + subgroup_ + prop['name']
+			Hprop += f'		ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({class_name}::{prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, {prop["hint_string"]}), "{prop["setter"]}", "{prop["getter"]}");\n'
+
+		for signal_name, args in content['signals']:
+			args_str = ''.join(f', PropertyInfo(GetTypeInfo<{arg_type if arg_type != "" else "Variant"}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args)
+			Hsignal += f'	ADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));\n'
+
+		for enum, consts in content['enum_constants'].items():
+			outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
+			for const in consts:
+				Henum += f'	BIND_ENUM_CONSTANT({const});\n'
+
+		for enum, consts in content['bitfields'].items():
+			outside_bind += f'VARIANT_BITFIELD_CAST({enum});\n'
+			for const in consts:
+				Hbitfield += f'	BIND_BITFIELD_FLAG({const});\n'
+
+		for const in content['constants']:
+			Hconst += f'	BIND_CONSTANT({const});\n'
+
+		header_rpc_config = f'void {class_name}::_rpc_config() {{' + ('' if header_rpc_config == '' else '\n') + header_rpc_config + '}\n\n'
+		bind_array = [i for i in [Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '']
+		if outside_bind != '':
+			header_defs.append(outside_bind)
+		header_defs += [f'void {class_name}::_bind_methods() {{' + ''.join('\n\n' + i for i in bind_array) + '}\n', header_rpc_config]
+
+	content = ''
+	file_name = filename_to_gen_filename(file, src)
+	if len(defs) != 0:
+		header_include = '#include <{}>\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, src).replace('\\', '/'))
+		content = header_include + '\n'.join(header_defs)
+
+	os.makedirs(os.path.dirname(file_name), exist_ok=True)
+	with open(file_name, 'w') as fileopen:
+		fileopen.write(content)
+
+
 def write_register_header(defs, src, target):		
 	scripts_header = ''
 	header_register = 'inline void register_script_classes() {\n'
 
 	for file, classes in defs.items():
-		header_defs = ''
-		if len(classes) != 0:
-			scripts_header += '#include <{}>\n'.format(os.path.relpath(file, src).replace('\\', '/'))
+		if len(classes) == 0:
+			continue
 
-			for class_name, content in classes.items():
-				Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', ''
-				outside_bind = ''
-				header_rpc_config = ''
-				methods_list = [method['bind_name'] for method in content['methods']]
-
-				header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
-				for method in content['methods']:
-					if 'varargs' not in method.keys():
-						args = ''.join([f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args']])
-						defvals = ''.join([f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != ''])
-						if method['is_static']:
-							Hstatic_method += f'	ClassDB::bind_static_method("{class_name}", D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
-						else:
-							Hmethod += f'	ClassDB::bind_method(D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
-
-						if 'rpc_config' in method.keys():
-							header_rpc_config += f"""	{{
-			Dictionary opts;
-			opts["rpc_mode"] = MultiplayerAPI::{method['rpc_config']['rpc_mode']};
-			opts["transfer_mode"] = MultiplayerPeer::{method['rpc_config']['transfer_mode']};
-			opts["call_local"] = {method['rpc_config']['call_local']};
-			opts["channel"] = {method['rpc_config']['channel']};
-			rpc_config("{method["name"]}", opts);
-		}}
-	"""
-					else:
-						args_list = '\n'.join([f'		mi.arguments.push_back(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"));' for type, name in method['varargs']])
-
-						Hvaragr_method += f"""	{{
-			MethodInfo mi;
-			mi.name = "{method["name"]}";
-	""" + args_list + f"""
-			ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "{method["bind_name"]}", &{class_name}::{method["name"]}, mi);
-		}}
-	"""
-				prev_group, prev_subgroup = '', ''
-				for prop in content['properties']:
-					if prop['getter'] not in methods_list:
-						Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::_cppscript_getter<&{class_name}::{prop["name"]}>);\n'
-
-					if prop['setter'] not in methods_list:
-						Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::_cppscript_setter<&{class_name}::{prop["name"]}>);\n'
-
-					group, subgroup = prop['group'], prop['subgroup']
-					group_ = group_name(group)
-					if group != '' and group != prev_group:
-						Hprop += f'	ADD_GROUP("{group}", "{group_}");\n'
-						prev_group = group
-
-					subgroup_ = group_name(subgroup)
-					if subgroup != '' and subgroup != prev_subgroup:
-						Hprop += f'	ADD_SUBGROUP("{subgroup}", "{group_}{subgroup_}");\n'
-						prev_subgroup = subgroup
-
-					prop_name = group_ + subgroup_ + prop['name']
-					Hprop += f'		ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({class_name}::{prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, {prop["hint_string"]}), "{prop["setter"]}", "{prop["getter"]}");\n'
-
-				for signal_name, args in content['signals']:
-					args_str = ''.join([f', PropertyInfo(GetTypeInfo<{arg_type if arg_type != "" else "Variant"}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args])
-					Hsignal += f'	ADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));\n'
-
-				for enum, consts in content['enum_constants'].items():
-					outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
-					for const in consts:
-						Henum += f'	BIND_ENUM_CONSTANT({const});\n'
-
-				for enum, consts in content['bitfields'].items():
-					outside_bind += f'VARIANT_BITFIELD_CAST({enum});\n'
-					for const in consts:
-						Hbitfield += f'	BIND_BITFIELD_FLAG({const});\n'
-
-				for const in content['constants']:
-					Hconst += f'	BIND_CONSTANT({const});\n'
-
-				header_rpc_config = f'void {class_name}::_rpc_config() {{' + ('' if header_rpc_config == '' else '\n') + header_rpc_config + '}\n\n'
-				bind_array = [i for i in [Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '']
-
-				# new
-				header_include = '#include <{}>\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, src).replace('\\', '/'))
-				header_defs += header_include  + outside_bind + f'void {class_name}::_bind_methods() {{' + ''.join(['\n\n' + i for i in bind_array]) + '}\n\n' + header_rpc_config
-
-		file_name = filename_to_gen_filename(file, src)
-
-		os.makedirs(os.path.dirname(file_name), exist_ok=True)
-		with open(file_name, 'w') as fileopen:
-			fileopen.write(header_defs)
+		scripts_header += '#include <{}>\n'.format(os.path.relpath(file, src).replace('\\', '/'))
+		for class_name, content in classes.items():
+			header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
 
 	scripts_header += '\nusing namespace godot;\n\n'
 	scripts_header += header_register + '}\n\n'
