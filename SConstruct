@@ -8,8 +8,8 @@ env = SConscript('godot-cpp/SConstruct').Clone()
 
 env.Append(CPPPATH=[SRC_DIR, 'src'])		# CppScript config
 env['src'] = SRC_DIR				# Path to C++ source files
-env['defs_file'] = 'src/defs.json'		# Path to generated bindings
-env['gen_header'] = 'src/scripts.gen.h'		# Path to generated header
+env['defs_file'] = '../src/defs.json'		# Path to generated bindings
+env['gen_header'] = '../src/scripts.gen.h'	# Path to generated header
 env['auto_methods'] = True			# Generate bindings to public methods automatically
 						# Or require GMETHOD() before methods
 
