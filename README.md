@@ -11,17 +11,14 @@ Python script that implements various C++ macros to automate binding code genera
 #### Programs
 [Godot 4](https://godotengine.org/download/archive/) (>4.1)
 
-[Python](https://www.python.org/downloads/)
-
-[SCons](https://scons.org/pages/download.html)
-
+[Requirements](https://docs.godotengine.org/en/stable/contributing/development/compiling/index.html#building-for-target-platforms) from official guide for your OS
 
 
 
 #### Python dependencies
-libclang, pcpp
+libclang
 ```bash
-pip install libclang pcpp
+pip install libclang
 ```
 ## Installation
 
