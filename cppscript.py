@@ -265,7 +265,7 @@ def parse_header(index, scons_file, src, auto_methods):
 					case 'GSIGNAL':
 						macro_args = get_macro_args(file, macro)
 						name = macro_args[0]
-						args = get_pair_arglist(macro_args[1:], '')
+						args = get_pair_arglist(macro_args[1:], 'Variant')
 						class_defs['signals'].append((name, args))
 
 					case 'GRPC':
@@ -461,7 +461,7 @@ def write_header(file, defs, src):
 			Hprop += f'		ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({class_name}::{prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, {prop["hint_string"]}), "{prop["setter"]}", "{prop["getter"]}");\n'
 
 		for signal_name, args in content['signals']:
-			args_str = ''.join(f', PropertyInfo(GetTypeInfo<{arg_type if arg_type != "" else "Variant"}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args)
+			args_str = ''.join(f', PropertyInfo(GetTypeInfo<{arg_type}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args)
 			Hsignal += f'	ADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));\n'
 
 		for enum, consts in content['enum_constants'].items():
