@@ -1,6 +1,5 @@
 from SCons.Script import *
 import clang.cindex
-import pcpp
 import os, sys, json
 
 
@@ -73,10 +72,39 @@ def GlobRecursive(path, pattern, **kwargs):
 
 
 def get_macro_args(file, macro):
-	p = pcpp.Preprocessor()
-	n, args, pos = p.collect_args(list(p.parsegen(str_from_file(file, macro.extent.start.offset + len(macro.spelling), macro.extent.end.offset))))
-	array = [''.join(i.value for i in arg) for arg in args]
-	return array if array != [''] else []
+	args_str = get_macro_body(file, macro)
+
+	args = []
+	in_quotes, escaped = False, False
+	tail, brack_count = 0, 0
+	for idx in range(len(args_str)):
+		match args_str[idx]:
+			case '\\':
+				escaped = True
+				continue
+
+			case '"':
+				if not escaped:
+					in_quotes = not in_quotes
+
+			case '(' | '<' | '[' | '{':
+				if not in_quotes:
+					brack_count += 1
+
+			case ')' | '>' | ']' | '}':
+				if not in_quotes:
+					brack_count -= 1
+
+			case ',':
+				if not in_quotes and brack_count == 0:
+					args.append(args_str[tail:idx].strip())
+					tail = idx + 1
+		escaped = False
+
+	if tail != len(args_str):
+		args.append(args_str[tail:].strip())
+
+	return args
 
 
 def group_name(name):
