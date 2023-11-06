@@ -9,7 +9,7 @@ Python script that implements various C++ macros to automate binding code genera
 [Property hints description](https://github.com/IvanInventor/godot-cppscript-example/blob/master/src/example_properties.hpp) (read comments)
 ## Dependencies
 #### Programs
-[Godot 4](https://godotengine.org/download/archive/) (>4.1)
+[Godot 4](https://godotengine.org/download/archive/) (>=4.1)
 
 [Requirements](https://docs.godotengine.org/en/stable/contributing/development/compiling/index.html#building-for-target-platforms) from official guide for your OS
 
@@ -29,15 +29,28 @@ pip install libclang
 git submodule add https://github.com/IvanInventor/godot-cpp-script cppscript
 git submodule update --recursive --init cppscript
 ```
-- Checkout your [version](https://github.com/godotengine/godot-cpp/tags) of godot
-```bash
-cd cppscript/godot-cpp/
-git checkout <tag>
-```
+- Checkout your version of godot
+    - For stable releases: checkout one of [tags](https://github.com/godotengine/godot-cpp/tags)
+    ```bash
+    cd cppscript/godot-cpp/
+    git checkout <tag>
+    ```
+    - For custom builds (from [guide](https://docs.godotengine.org/en/stable/tutorials/scripting/gdextension/gdextension_cpp_example.html#building-the-c-bindings)):
+    ```bash
+    # switch to branch corresponding to godot version
+    # Godot 4.1.3 -> 4.1
+    cd cppscript/godot-cpp/
+    git pull origin 4.1
+    git switch 4.1
+    # Generate custom bindings
+    ./your_godot_executable --dump-extension-api
+    mv extension_api.json gdextension/extension_api.json
+    ```
+
 ## Build project
 From cppscript/
 ```bash
- scons
+scons
 ```
 or
 ```bash
