@@ -24,6 +24,8 @@ csb = Builder(
 env.Append(BUILDERS={'CppScript' : csb})
 
 header, *bindings = env.CppScript(scripts)
+env.Precious(bindings)
+
 
 if env["platform"] == "macos":
     library = env.SharedLibrary(
@@ -38,4 +40,5 @@ else:
         source=sources + bindings,
     )
 
+env.Depends(library[0].sources, bindings)
 Default(library)

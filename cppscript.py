@@ -36,7 +36,7 @@ def get_pair_arglist(args, default_left):
 
 
 def find_default_arg(file, arg):
-	arg_def = str_from_file(arg.extent.start.file.name, arg.extent.start.offset, arg.extent.end.offset)
+	arg_def = str_from_file(file, arg.extent.start.offset, arg.extent.end.offset)
 	for token in arg.get_tokens():
 		if token.spelling == '=':
 			return str_from_file(file, token.extent.end.offset, arg.extent.end.offset).lstrip()
@@ -119,6 +119,11 @@ def generate_header_emitter(target, source, env):
 def generate_header(target, source, env):
 	index = clang.cindex.Index.create()
 	try:
+		os.remove(os.path.join(env['src'], 'properties.gen.h'))
+	except:
+		pass
+
+	try:
 		try:
 			sourcesigs, sources = target[0].get_stored_info().binfo.bsourcesigs, target[0].get_stored_info().binfo.bsources
 			cached_defs = load_defs_json(env['defs_file'])
@@ -129,10 +134,11 @@ def generate_header(target, source, env):
 			new_defs = {str(s) : parse_and_write_header(index, s, env['src'], env['auto_methods']) for s in source}
 
 		write_register_header(new_defs, env['src'], str(target[0]))
+		write_property_header(new_defs, os.path.join(env['src'], 'properties.gen.h'))
 
 		with open(env['defs_file'], 'w') as file:
 			json.dump(new_defs, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
-
+		
 	except CppScriptException as e:
 		print(f'\n{e}\n', file=sys.stderr)
 		return 1
@@ -140,7 +146,7 @@ def generate_header(target, source, env):
 
 def parse_header(index, scons_file, src, auto_methods):
 	file = scons_file.get_text_contents()
-	translation_unit = index.parse(str(scons_file), args=[f'-I{src}', '-Isrc'], unsaved_files=[(str(scons_file), file)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+	translation_unit = index.parse(str(scons_file), args=[f'-I{src}', '-Isrc', '-DGDCLASS'], unsaved_files=[(str(scons_file), file)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
 		raise CppScriptException("{str(scons_file)}: failed to create translation unit")
@@ -379,7 +385,6 @@ def parse_header(index, scons_file, src, auto_methods):
 
 						class_defs['properties'].append(properties)
 
-			return item
 
 						
 		leftover = collapse_list(class_macros, lambda x: x.kind != clang.cindex.CursorKind.MACRO_INSTANTIATION, apply_macros)
@@ -403,10 +408,12 @@ def parse_and_write_header(index, scons_file, src, auto_methods):
 
 def write_header(file, defs, src):
 	header_defs = []
+	property_set_get_defs = []
 	for class_name, content in defs.items():
 		Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', ''
 		outside_bind = ''
 		header_rpc_config = ''
+		property_macro = f'#define GSETGET_{class_name}_{content["base"]}'
 		methods_list = [method['bind_name'] for method in content['methods']]
 
 		for method in content['methods']:
@@ -441,10 +448,14 @@ def write_header(file, defs, src):
 		prev_group, prev_subgroup = '', ''
 		for prop in content['properties']:
 			if prop['getter'] not in methods_list:
-				Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::_cppscript_getter<&{class_name}::{prop["name"]}>);\n'
+				Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::{prop["getter"]});\n'
+				property_set_get_defs.append(f'decltype({class_name}::{prop["name"]}) {class_name}::{prop["getter"]}() {{\n\treturn {prop["name"]};\n}}\n')
+				property_macro += f'\t\\\ndecltype({prop["name"]}) {prop["getter"]}();'
 
 			if prop['setter'] not in methods_list:
-				Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::_cppscript_setter<&{class_name}::{prop["name"]}>);\n'
+				Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::{prop["setter"]});\n'
+				property_set_get_defs.append(f'void {class_name}::{prop["setter"]}(decltype({class_name}::{prop["name"]}) value) {{\n\tthis->{prop["name"]} = value;\n}}\n')
+				property_macro += f'\t\\\nvoid {prop["setter"]}(decltype({prop["name"]}));'
 
 			group, subgroup = prop['group'], prop['subgroup']
 			group_ = group_name(group)
@@ -459,6 +470,8 @@ def write_header(file, defs, src):
 
 			prop_name = group_ + subgroup_ + prop['name']
 			Hprop += f'		ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({class_name}::{prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, {prop["hint_string"]}), "{prop["setter"]}", "{prop["getter"]}");\n'
+
+		defs[class_name]['property_defs'] = property_macro
 
 		for signal_name, args in content['signals']:
 			args_str = ''.join(f', PropertyInfo(GetTypeInfo<{arg_type}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args)
@@ -487,7 +500,7 @@ def write_header(file, defs, src):
 	file_name = filename_to_gen_filename(file, src)
 	if len(defs) != 0:
 		header_include = '#include <{}>\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, src).replace('\\', '/'))
-		content = header_include + '\n'.join(header_defs)
+		content = header_include + '\n'.join(header_defs) + ''.join(property_set_get_defs)
 
 	os.makedirs(os.path.dirname(file_name), exist_ok=True)
 	with open(file_name, 'w') as fileopen:
@@ -511,4 +524,14 @@ def write_register_header(defs, src, target):
 
 	with open(target, 'w') as file:
 		file.write(scripts_header)
+
+
+def write_property_header(new_defs, filepath):
+	body = ''
+	for _, file in new_defs.items():
+		for class_name, content in file.items():
+			body += content['property_defs'] + '\n\n'
+	
+	with open(filepath, 'w') as file:
+		file.write(body)
 
