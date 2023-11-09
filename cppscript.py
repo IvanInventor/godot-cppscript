@@ -101,8 +101,9 @@ def get_macro_args(file, macro):
 					tail = idx + 1
 		escaped = False
 
-	if tail != len(args_str):
-		args.append(args_str[tail:].strip())
+	last = args_str[tail:].strip()
+	if last != '':
+		args.append(last)
 
 	return args
 
