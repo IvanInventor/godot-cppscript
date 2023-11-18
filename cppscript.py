@@ -5,7 +5,6 @@ import os, sys, json
 
 
 KEYWORDS = ['GPROPERTY', 'GMETHOD', 'GGROUP', 'GSUBGROUP', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE']
-VIRTUAL_METHODS = ['_enter_tree', '_exit_tree', '_input', '_unhandled_input', '_unhandled_key_input', '_process', '_physics_process']
 
 # Helpers
 class CppScriptException(Exception):
@@ -159,8 +158,7 @@ def parse_header(index, scons_file, src, auto_methods):
 		for cursor in parent.get_children():
 			match cursor.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
-					# Temporarily do not register virtual methods
-					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC and not cursor.is_virtual_method():
+					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC and not (cursor.is_virtual_method() and cursor.spelling.startswith('_')):
 						class_cursors.append(cursor)
 					
 				case clang.cindex.CursorKind.FIELD_DECL:
@@ -352,17 +350,16 @@ def parse_header(index, scons_file, src, auto_methods):
 			properties = None
 			match item.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
-					if item.spelling not in VIRTUAL_METHODS and not item.is_virtual_method(): # Do not register virtual temporary
-						properties = {}
-						if process_macros(item, macros, properties, not auto_methods):
-							properties |= {	'name' : item.spelling,
-									'bind_name' : item.spelling,
-									'return' : item.result_type.spelling,
-		      							'args' : [(arg.type.spelling, arg.spelling, find_default_arg(file, arg)) for arg in item.get_arguments()],
-									# Must be a better way of getting default method arguments
-									'is_static' : item.is_static_method(),
-									}
-							class_defs['methods'].append(properties)
+					properties = {}
+					if process_macros(item, macros, properties, not auto_methods):
+						properties |= {	'name' : item.spelling,
+								'bind_name' : item.spelling,
+								'return' : item.result_type.spelling,
+								'args' : [(arg.type.spelling, arg.spelling, find_default_arg(file, arg)) for arg in item.get_arguments()],
+								'is_static' : item.is_static_method(),
+		     						'is_virtual' : item.is_virtual_method()
+								}
+						class_defs['methods'].append(properties)
 
 				case clang.cindex.CursorKind.ENUM_DECL:
 					properties = {'enum_type' : 'enum_constants'}
@@ -411,7 +408,7 @@ def write_header(file, defs, src):
 	header_defs = []
 	property_set_get_defs = []
 	for class_name, content in defs.items():
-		Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', ''
+		Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', ''
 		outside_bind = ''
 		header_rpc_config = ''
 		property_macro = f'#define GSETGET_{class_name}_{content["base"]}'
@@ -423,6 +420,10 @@ def write_header(file, defs, src):
 				defvals = ''.join(f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != '')
 				if method['is_static']:
 					Hstatic_method += f'	ClassDB::bind_static_method("{class_name}", D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
+
+				elif method['is_virtual']:
+					Hvirtual_method += f'	BIND_VIRTUAL_METHOD({class_name}, {method["bind_name"]});\n'
+
 				else:
 					Hmethod += f'	ClassDB::bind_method(D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
 
@@ -492,7 +493,7 @@ def write_header(file, defs, src):
 			Hconst += f'	BIND_CONSTANT({const});\n'
 
 		header_rpc_config = f'void {class_name}::_rpc_config() {{' + ('' if header_rpc_config == '' else '\n') + header_rpc_config + '}\n\n'
-		bind_array = [i for i in [Hmethod, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '']
+		bind_array = [i for i in [Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '']
 		if outside_bind != '':
 			header_defs.append(outside_bind)
 		header_defs += [f'void {class_name}::_bind_methods() {{' + ''.join('\n\n' + i for i in bind_array) + '}\n', header_rpc_config]
