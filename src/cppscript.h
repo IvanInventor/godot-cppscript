@@ -1,6 +1,6 @@
 #ifndef CPPSCRIPT_H
 #define CPPSCRIPT_H
-#include <properties.gen.h>
+#include "properties.gen.h"
 #include <godot_cpp/classes/multiplayer_api.hpp>
 #include <godot_cpp/classes/multiplayer_peer.hpp>
 

@@ -411,7 +411,7 @@ def write_header(file, defs, src):
 		Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', ''
 		outside_bind = ''
 		header_rpc_config = ''
-		property_macro = f'#define GSETGET_{class_name}_{content["base"]}'
+		property_macro = ''
 		methods_list = [method['bind_name'] for method in content['methods']]
 
 		for method in content['methods']:
@@ -452,12 +452,12 @@ def write_header(file, defs, src):
 			if prop['getter'] not in methods_list:
 				Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::{prop["getter"]});\n'
 				property_set_get_defs.append(f'decltype({class_name}::{prop["name"]}) {class_name}::{prop["getter"]}() {{\n\treturn {prop["name"]};\n}}\n')
-				property_macro += f'\t\\\ndecltype({prop["name"]}) {prop["getter"]}();'
+				property_macro += f'\ndecltype({prop["name"]}) {prop["getter"]}();'
 
 			if prop['setter'] not in methods_list:
 				Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::{prop["setter"]});\n'
 				property_set_get_defs.append(f'void {class_name}::{prop["setter"]}(decltype({class_name}::{prop["name"]}) value) {{\n\tthis->{prop["name"]} = value;\n}}\n')
-				property_macro += f'\t\\\nvoid {prop["setter"]}(decltype({prop["name"]}));'
+				property_macro += f'\nvoid {prop["setter"]}(decltype({prop["name"]}));'
 
 			group, subgroup = prop['group'], prop['subgroup']
 			group_ = group_name(group)
@@ -532,7 +532,7 @@ def write_property_header(new_defs, filepath):
 	body = ''
 	for _, file in new_defs.items():
 		for class_name, content in file.items():
-			body += content['property_defs'] + '\n\n'
+			body += f'#define GSETGET_{class_name}_{content["base"]}' + content['property_defs'].replace('\n', ' \\\n') + '\n\n'
 	
 	with open(filepath, 'w') as file:
 		file.write(body)
