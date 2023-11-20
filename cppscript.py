@@ -511,7 +511,10 @@ def write_header(file, defs, src):
 
 def write_register_header(defs, src, target):		
 	scripts_header = ''
-	header_register = 'inline void register_script_classes() {\n'
+
+	# Pairs of (base_class_name, register_str) to ensure
+	# parent classes ane registered before children
+	classes_register = []
 
 	for file, classes in defs.items():
 		if len(classes) == 0:
@@ -519,10 +522,18 @@ def write_register_header(defs, src, target):
 
 		scripts_header += '#include <{}>\n'.format(os.path.relpath(file, src).replace('\\', '/'))
 		for class_name, content in classes.items():
-			header_register += f"	GDREGISTER_{content['type']}({class_name});\n"
+			for i in range(len(classes_register)):
+				if class_name == classes_register[i][0]:
+					classes_register.insert(i, (content['base'], f"	GDREGISTER_{content['type']}({class_name});\n"))
+					break
+			else:
+				classes_register.append((content['base'], f"	GDREGISTER_{content['type']}({class_name});\n"))
+
 
 	scripts_header += '\nusing namespace godot;\n\n'
-	scripts_header += header_register + '}\n\n'
+	header_register = ''.join(i for _, i in classes_register)
+	header_register = 'inline void register_script_classes() {' + ('\n' + header_register if header_register != '' else '') + '}\n'
+	scripts_header += header_register
 
 	with open(target, 'w') as file:
 		file.write(scripts_header)
