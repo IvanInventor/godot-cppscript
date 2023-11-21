@@ -406,12 +406,12 @@ def parse_and_write_header(index, scons_file, src, auto_methods):
 
 def write_header(file, defs, src):
 	header_defs = []
-	property_set_get_defs = []
 	for class_name, content in defs.items():
 		Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', ''
 		outside_bind = ''
 		header_rpc_config = ''
 		property_macro = ''
+		property_set_get_defs = ''
 		methods_list = [method['bind_name'] for method in content['methods']]
 
 		for method in content['methods']:
@@ -451,13 +451,13 @@ def write_header(file, defs, src):
 		for prop in content['properties']:
 			if prop['getter'] not in methods_list:
 				Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::{prop["getter"]});\n'
-				property_set_get_defs.append(f'decltype({class_name}::{prop["name"]}) {class_name}::{prop["getter"]}() {{\n\treturn {prop["name"]};\n}}\n')
-				property_macro += f'\ndecltype({prop["name"]}) {prop["getter"]}();'
+				property_set_get_defs += f'GENERATE_GETTER({class_name}::{prop["getter"]}, {class_name}::{prop["name"]});\n'
+				property_macro += f'\nGENERATE_GETTER_DECLARATION({prop["getter"]}, {prop["name"]})'
 
 			if prop['setter'] not in methods_list:
 				Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::{prop["setter"]});\n'
-				property_set_get_defs.append(f'void {class_name}::{prop["setter"]}(decltype({class_name}::{prop["name"]}) value) {{\n\tthis->{prop["name"]} = value;\n}}\n')
-				property_macro += f'\nvoid {prop["setter"]}(decltype({prop["name"]}));'
+				property_set_get_defs += f'GENERATE_SETTER({class_name}::{prop["setter"]}, {class_name}::{prop["name"]});\n'
+				property_macro += f'\nGENERATE_SETTER_DECLARATION({prop["setter"]}, {prop["name"]})'
 
 			group, subgroup = prop['group'], prop['subgroup']
 			group_ = group_name(group)
@@ -492,17 +492,19 @@ def write_header(file, defs, src):
 		for const in content['constants']:
 			Hconst += f'	BIND_CONSTANT({const});\n'
 
-		header_rpc_config = f'void {class_name}::_rpc_config() {{' + ('' if header_rpc_config == '' else '\n') + header_rpc_config + '}\n\n'
-		bind_array = [i for i in [Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '']
-		if outside_bind != '':
-			header_defs.append(outside_bind)
-		header_defs += [f'void {class_name}::_bind_methods() {{' + ''.join('\n\n' + i for i in bind_array) + '}\n', header_rpc_config]
+		header_rpc_config = f'void {class_name}::_rpc_config() {{' + ('\n' + header_rpc_config if header_rpc_config != '' else '') + '}\n'
+		header_bind_methods = '\n\n'.join(i for i in [Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '')
+		header_defs += [f'// {class_name} : {content["base"]}\n',
+			f'void {class_name}::_bind_methods() {{'
+			+ ('\n' + header_bind_methods if header_bind_methods != '' else '')
+			+ '}\n', header_rpc_config] + \
+			([property_set_get_defs] if property_set_get_defs != '' else []) + \
+			([outside_bind] if outside_bind != '' else [])
 
-	content = ''
 	file_name = filename_to_gen_filename(file, src)
 	if len(defs) != 0:
 		header_include = '#include <{}>\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, src).replace('\\', '/'))
-		content = header_include + '\n'.join(header_defs) + ''.join(property_set_get_defs)
+		content = header_include + '\n'.join(header_defs)
 
 	os.makedirs(os.path.dirname(file_name), exist_ok=True)
 	with open(file_name, 'w') as fileopen:

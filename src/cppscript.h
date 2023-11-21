@@ -18,6 +18,22 @@ private:
 #define GVIRTUAL_CLASS(CLASS_NAME, CLASS_NAME_INH) GCLASS(CLASS_NAME, CLASS_NAME_INH)
 #define GABSTRACT_CLASS(CLASS_NAME, CLASS_NAME_INH) GCLASS(CLASS_NAME, CLASS_NAME_INH)
 
+#define GENERATE_GETTER_DECLARATION(function, property)	\
+decltype(property) function();
+
+#define GENERATE_SETTER_DECLARATION(function, property)	\
+void function(decltype(property));
+
+#define GENERATE_GETTER(function, property)	\
+decltype(property) function() {			\
+	return property;			\
+}
+
+#define GENERATE_SETTER(function, property)	\
+void function(decltype(property) value) {	\
+	this->property = value;			\
+}
+
 #define GPROPERTY(...)
 #define GMETHOD(...)
 #define GGROUP(...)
