@@ -419,13 +419,13 @@ def write_header(file, defs, src):
 				args = ''.join(f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args'])
 				defvals = ''.join(f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != '')
 				if method['is_static']:
-					Hstatic_method += f'	ClassDB::bind_static_method("{class_name}", D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
+					Hstatic_method += f'\tClassDB::bind_static_method("{class_name}", D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
 
 				elif method['is_virtual']:
-					Hvirtual_method += f'	BIND_VIRTUAL_METHOD({class_name}, {method["bind_name"]});\n'
+					Hvirtual_method += f'\tBIND_VIRTUAL_METHOD({class_name}, {method["bind_name"]});\n'
 
 				else:
-					Hmethod += f'	ClassDB::bind_method(D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
+					Hmethod += f'\tClassDB::bind_method(D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
 
 				if 'rpc_config' in method.keys():
 					header_rpc_config += f"""	{{
@@ -438,66 +438,67 @@ def write_header(file, defs, src):
 	}}
 """
 			else:
-				args_list = '\n'.join(f'	mi.arguments.push_back(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"));' for type, name in method['varargs'])
+				args_list = '\n'.join(f'\tmi.arguments.push_back(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"));' for type, name in method['varargs'])
 
 				Hvaragr_method += f"""	{{
 	MethodInfo mi;
 	mi.name = "{method["name"]}";
-""" + args_list + f"""
+{args_list}
 	ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "{method["bind_name"]}", &{class_name}::{method["name"]}, mi);
 	}}
 """
 		prev_group, prev_subgroup = '', ''
 		for prop in content['properties']:
 			if prop['getter'] not in methods_list:
-				Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::{prop["getter"]});\n'
+				Hmethod += f'\tClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::{prop["getter"]});\n'
 				property_set_get_defs += f'GENERATE_GETTER({class_name}::{prop["getter"]}, {class_name}::{prop["name"]});\n'
 				property_macro += f'\nGENERATE_GETTER_DECLARATION({prop["getter"]}, {prop["name"]})'
 
 			if prop['setter'] not in methods_list:
-				Hmethod += f'	ClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::{prop["setter"]});\n'
+				Hmethod += f'\tClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::{prop["setter"]});\n'
 				property_set_get_defs += f'GENERATE_SETTER({class_name}::{prop["setter"]}, {class_name}::{prop["name"]});\n'
 				property_macro += f'\nGENERATE_SETTER_DECLARATION({prop["setter"]}, {prop["name"]})'
 
 			group, subgroup = prop['group'], prop['subgroup']
 			group_ = group_name(group)
 			if group != '' and group != prev_group:
-				Hprop += f'	ADD_GROUP("{group}", "{group_}");\n'
+				Hprop += f'\tADD_GROUP("{group}", "{group_}");\n'
 				prev_group = group
 
 			subgroup_ = group_name(subgroup)
 			if subgroup != '' and subgroup != prev_subgroup:
-				Hprop += f'	ADD_SUBGROUP("{subgroup}", "{group_}{subgroup_}");\n'
+				Hprop += f'\tADD_SUBGROUP("{subgroup}", "{group_}{subgroup_}");\n'
 				prev_subgroup = subgroup
 
 			prop_name = group_ + subgroup_ + prop['name']
-			Hprop += f'		ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({class_name}::{prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, {prop["hint_string"]}), "{prop["setter"]}", "{prop["getter"]}");\n'
+			Hprop += f'\t\tADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, {prop["hint_string"]}), "{prop["setter"]}", "{prop["getter"]}");\n'
 
 		defs[class_name]['property_defs'] = property_macro
 
 		for signal_name, args in content['signals']:
 			args_str = ''.join(f', PropertyInfo(GetTypeInfo<{arg_type}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args)
-			Hsignal += f'	ADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));\n'
+			Hsignal += f'\tADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));\n'
 
 		for enum, consts in content['enum_constants'].items():
 			outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
 			for const in consts:
-				Henum += f'	BIND_ENUM_CONSTANT({const});\n'
+				Henum += f'\tBIND_ENUM_CONSTANT({const});\n'
 
 		for enum, consts in content['bitfields'].items():
 			outside_bind += f'VARIANT_BITFIELD_CAST({enum});\n'
 			for const in consts:
-				Hbitfield += f'	BIND_BITFIELD_FLAG({const});\n'
+				Hbitfield += f'\tBIND_BITFIELD_FLAG({const});\n'
 
 		for const in content['constants']:
-			Hconst += f'	BIND_CONSTANT({const});\n'
+			Hconst += f'\tBIND_CONSTANT({const});\n'
 
-		header_rpc_config = f'void {class_name}::_rpc_config() {{' + ('\n' + header_rpc_config if header_rpc_config != '' else '') + '}\n'
+		header_rpc_config = 'void {}::_rpc_config() {{{}}}\n'.format(
+				class_name, '\n' + header_rpc_config if header_rpc_config != '' else '')
 		header_bind_methods = '\n\n'.join(i for i in [Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '')
 		header_defs += [f'// {class_name} : {content["base"]}\n',
-			f'void {class_name}::_bind_methods() {{'
-			+ ('\n' + header_bind_methods if header_bind_methods != '' else '')
-			+ '}\n', header_rpc_config] + \
+			'void {}::_bind_methods() {{{}}}\n'.format(
+			class_name, '\n' + header_bind_methods if header_bind_methods != '' else ''),
+			header_rpc_config] + \
 			([property_set_get_defs] if property_set_get_defs != '' else []) + \
 			([outside_bind] if outside_bind != '' else [])
 
@@ -534,7 +535,8 @@ def write_register_header(defs, src, target):
 
 	scripts_header += '\nusing namespace godot;\n\n'
 	header_register = ''.join(i for _, i in classes_register)
-	header_register = 'inline void register_script_classes() {' + ('\n' + header_register if header_register != '' else '') + '}\n'
+	header_register = 'inline void register_script_classes() {{{}}}\n'.format(
+			'\n' + header_register if header_register != '' else '')
 	scripts_header += header_register
 
 	with open(target, 'w') as file:
