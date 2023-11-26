@@ -55,18 +55,20 @@ template <typename T>
 struct is_defined<T, std::void_t<decltype(T::VARIANT_TYPE)>> : std::true_type {};
 
 template<class T>
-static constexpr bool is_supported_type = is_defined<godot::GetTypeInfo<T>>::value;
+static constexpr bool is_supported_type_v = is_defined<godot::GetTypeInfo<T>>::value;
 
 
 template<class T>
-struct is_supported : std::integral_constant<bool, is_supported_type<T>> {
-	static_assert(is_supported_type<T>, "Type not supported. If it's your custom class, maybe you forgot to register it with GCLASS()");
+struct assert_is_supported_type : std::integral_constant<bool, is_supported_type_v<T>> {
+	static_assert(is_supported_type_v<T>, "Type not supported. If it's your custom class, either it had complilation errors, or maybe you forgot to register it with GCLASS()");
 };
 
+template<class T>
+static constexpr bool assert_is_supported_type_v = assert_is_supported_type<T>::value;
 
 
 template<class T>
-static constexpr bool is_ret_supported = is_supported<T>::value;
+static constexpr bool is_ret_supported = assert_is_supported_type_v<T>;
 
 template<>
 static constexpr bool is_ret_supported<void> = true;
@@ -76,14 +78,12 @@ struct MemberSignature;
 
 template <typename Class, typename Ret, typename... Args>
 struct MemberSignature<Ret (Class::*)(Args...) const> {
-	using ret_t = Ret;
-	static constexpr bool value = (is_ret_supported<Ret> && (is_supported<Args>::value && ...));
+	static constexpr bool value = is_ret_supported<Ret> && (assert_is_supported_type_v<Args> && ...);
 };
 
 template <typename Class, typename Ret, typename... Args>
 struct MemberSignature<Ret (Class::*)(Args...)> {
-	using ret_t = Ret;
-	static constexpr bool value = (is_ret_supported<Ret> && (is_supported<Args>::value && ...));
+	static constexpr bool value = is_ret_supported<Ret> && (assert_is_supported_type_v<Args> && ...);
 };
 
 template <typename Ret, typename... Args>
@@ -91,7 +91,7 @@ struct FunctionSignature;
 
 template <typename Ret, typename... Args>
 struct FunctionSignature<Ret (*)(Args...)> {
-	static constexpr bool value = is_ret_supported<Ret> && (is_supported<Args>::value && ...);
+	static constexpr bool value = is_ret_supported<Ret> && (assert_is_supported_type_v<Args> && ...);
 };
 
 
@@ -163,8 +163,8 @@ struct BindCheck<false> {
 
 template<class T, class ...Args>
 godot::PropertyInfo MakePropertyInfo(Args&&... args) {
-	static_assert(impl::is_supported<T>::value, "Property of this type is not supported");
-	return impl::BindCheck<impl::is_supported<T>::value>::template MakePropertyInfo<T>(std::forward<Args>(args)...);
+	static_assert(impl::assert_is_supported_type_v<T>, "Property of this type is not supported");
+	return impl::BindCheck<impl::assert_is_supported_type_v<T>>::template MakePropertyInfo<T>(std::forward<Args>(args)...);
 }
 
 template<auto Ptr>
