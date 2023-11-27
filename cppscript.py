@@ -500,7 +500,7 @@ def write_header(file, defs, src):
 
 	file_name = filename_to_gen_filename(file, src)
 	if len(defs) != 0:
-		header_include = '#include <{}>\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, src).replace('\\', '/'))
+		header_include = '#include <cppscript_bindings.h>\n\n#include <{}>\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, src).replace('\\', '/'))
 		content = header_include + '\n'.join(header_defs)
 
 	os.makedirs(os.path.dirname(file_name), exist_ok=True)
