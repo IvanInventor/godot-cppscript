@@ -111,6 +111,16 @@ def group_name(name):
 	return '' if name == '' else (name.lower().replace(" ", "") + "_")
 
  
+def get_file_scons(scons_file):
+	return str(scons_file), scons_file.get_text_contents()
+
+
+def get_file_cmake(filename):
+	with open(filename, 'r') as file:
+		filecontent = file.read()
+
+	return filename, filecontent
+
 # Builder
 def generate_header_emitter(target, source, env):
 	return [env.File(env['gen_header'])] + [env.File(filename_to_gen_filename(str(i), env['src'])) for i in source], source
@@ -128,10 +138,12 @@ def generate_header(target, source, env):
 			sourcesigs, sources = target[0].get_stored_info().binfo.bsourcesigs, target[0].get_stored_info().binfo.bsources
 			cached_defs = load_defs_json(env['defs_file'])
 
-			new_defs = {str(s) : (cached_defs[str(s)] if str(s) in sources and s.get_csig() == sourcesigs[sources.index(str(s))].csig and str(s) in cached_defs.keys() else parse_and_write_header(index, s, env['src'], env['auto_methods'])) for s in source}
+			new_defs = {str(s) : (cached_defs[str(s)]
+						if str(s) in sources and s.get_csig() == sourcesigs[sources.index(str(s))].csig and str(s) in cached_defs.keys()
+						else parse_and_write_header(index, *get_file_scons(s), env)) for s in source}
 
 		except AttributeError:
-			new_defs = {str(s) : parse_and_write_header(index, s, env['src'], env['auto_methods']) for s in source}
+			new_defs = {str(s) : parse_and_write_header(index, *get_file_scons(s), env) for s in source}
 
 		write_register_header(new_defs, env['src'], str(target[0]))
 		write_property_header(new_defs, os.path.join(env['src'], 'properties.gen.h'))
@@ -144,16 +156,14 @@ def generate_header(target, source, env):
 		return 1
 
 
-def parse_header(index, scons_file, src, auto_methods):
-	file = scons_file.get_text_contents()
-	translation_unit = index.parse(str(scons_file), args=[f'-I{src}', '-Isrc', '-DGDCLASS'], unsaved_files=[(str(scons_file), file)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+def parse_header(index, filename, filecontent, src, auto_methods):
+	translation_unit = index.parse(filename, args=[f'-I{src}', '-Isrc', '-DGDCLASS'], unsaved_files=[(filename, filecontent)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
-		raise CppScriptException("{str(scons_file)}: failed to create translation unit")
+		raise CppScriptException("{filename}: failed to create translation unit")
 
-	classes = []
-	found_classes = []
-	macros = []
+	classes_and_Gmacros = []
+	keyword_macros = []
 	def parse_class(parent, class_cursors):
 		for cursor in parent.get_children():
 			match cursor.kind:
@@ -163,47 +173,54 @@ def parse_header(index, scons_file, src, auto_methods):
 					
 				case clang.cindex.CursorKind.FIELD_DECL:
 					class_cursors.append(cursor)
-								
+
 				case clang.cindex.CursorKind.ENUM_DECL:
 					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
 						class_cursors.append(cursor)
+				case _:
+					parse_class(cursor, class_cursors)
 
-	#TODO: better class definition type code
-	def parse_cursor(cursor):
-		match cursor.kind:
-			case clang.cindex.CursorKind.CLASS_DECL:
-				found_classes.append(cursor)
+	def parse_cursor(parent, namespace):
+		for cursor in parent.get_children():
+			match cursor.kind:
+				case clang.cindex.CursorKind.CLASS_DECL:
+					classes_and_Gmacros.append((cursor, ''.join(n + '::' for n in namespace)))
 
-			case clang.cindex.CursorKind.MACRO_INSTANTIATION:
-				if cursor.spelling in KEYWORDS:
-					macros.append(cursor)
-					
-				elif cursor.spelling in ['GCLASS', 'GVIRTUAL_CLASS', 'GABSTRACT_CLASS']:
-					found_classes.append(cursor)
-					
-		for child in cursor.get_children():
-			parse_cursor(child)
-	
+				case clang.cindex.CursorKind.MACRO_INSTANTIATION:
+					if cursor.spelling in KEYWORDS:
+						keyword_macros.append(cursor)
 
-	parse_cursor(translation_unit.cursor)
+					elif cursor.spelling in ['GCLASS', 'GVIRTUAL_CLASS', 'GABSTRACT_CLASS']:
+						classes_and_Gmacros.append((cursor, None))
 
-	found_class = sorted(found_classes, key=lambda x: x.extent.start.offset, reverse=True)	
+				case clang.cindex.CursorKind.NAMESPACE:
+					parse_cursor(cursor, namespace + [cursor.spelling])
 
-	def add_class(cursor, macros):
-		if len(macros) > 1:
-			raise CppScriptException('{}:{}:{}: error: repeated class macro for a class at {}:{}'
-		       	.format(str(scons_file), macros[1].location.line, macros[1].location.column, macros[1].spelling, cursor.location.line, cursor.location.column))
+				case _:
+					parse_cursor(cursor, namespace)
+
+	parse_cursor(translation_unit.cursor, [])
+	found_class = sorted(classes_and_Gmacros, key=lambda x: x[0].extent.start.offset, reverse=True)	
+	classes = []
+	def add_class(cursor_t, macros_t):
+		cursor, namespace = cursor_t
+
+		if len(macros_t) > 1:
+			wrong_macro = macros_t[0][0]
+			raise CppScriptException('{}:{}:{}: error: repeated class macro for "{}" class defined at {}:{}'
+			.format(filename, wrong_macro.location.line, wrong_macro.location.column, cursor.spelling, cursor.location.line, cursor.location.column))
 
 		
-		for macro in macros:
-			classes.append((cursor, get_macro_args(file, macro)[1], macro.spelling[1:]))
+		for macro, _ in macros_t:
+			classes.append((cursor, get_macro_args(filecontent, macro)[1], macro.spelling[1:], namespace))
 
 
-	collapse_list(found_class, lambda x: x.kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
+	collapse_list(found_class, lambda x: x[0].kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
 		
 	parsed_classes = {}
-	for cursor, base, type in classes:
+	for cursor, base, type, namespace in classes:
 		class_defs = {
+			'namespace' : namespace,
 			'base' : base,
 			'type' : type,
 			'methods' : [],
@@ -217,7 +234,7 @@ def parse_header(index, scons_file, src, auto_methods):
 		parse_class(cursor, child_cursors)
 		group, subgroup = '', ''
 		start, end = cursor.extent.start.offset, cursor.extent.end.offset
-		class_macros = sorted([m for m in macros if start < m.extent.start.offset < end] + child_cursors, key=lambda x: x.extent.start.offset)
+		class_macros = sorted([m for m in keyword_macros if start < m.extent.start.offset < end] + child_cursors, key=lambda x: x.extent.start.offset)
 
 		def process_macros(item, macros, properties, is_ignored=False):
 			nonlocal group
@@ -227,19 +244,19 @@ def parse_header(index, scons_file, src, auto_methods):
 					case 'GMETHOD':
 						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
-		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
+							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
 						is_ignored = False
 
 					case 'GPROPERTY':
 						if item.kind != clang.cindex.CursorKind.FIELD_DECL:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be data member'
-		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
+							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
-						args = get_macro_args(file, macro)
+						args = get_macro_args(filecontent, macro)
 						if len(args) < 2:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage: must be at least 2 arguments: setter and getter'
-		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling))
+							.format(filename, macro.location.line, macro.location.column, macro.spelling))
 					
 						properties |= {
 								'setter' : args[0],
@@ -250,25 +267,25 @@ def parse_header(index, scons_file, src, auto_methods):
 						is_ignored = False
 
 					case 'GGROUP':
-						group = get_macro_body(file, macro)
+						group = get_macro_body(filecontent, macro)
 						subgroup = ''
 
 					case 'GSUBGROUP':
-						subgroup = get_macro_body(file, macro)
+						subgroup = get_macro_body(filecontent, macro)
 
 					case 'GBITFIELD':
 						if item.kind != clang.cindex.CursorKind.ENUM_DECL:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be enum'
-		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
+							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
 						if item.type.spelling[-1] == ')':
 								raise CppScriptException('{}:{}:{}: error: enum at {}:{} must be named'
-		       						.format(str(scons_file), macro.location.line, macro.location.column, item.location.line, item.location.column))
+								.format(filename, macro.location.line, macro.location.column, item.location.line, item.location.column))
 						
 						properties['enum_type'] = 'bitfields'
 
 					case 'GSIGNAL':
-						macro_args = get_macro_args(file, macro)
+						macro_args = get_macro_args(filecontent, macro)
 						name = macro_args[0]
 						args = get_pair_arglist(macro_args[1:], 'Variant')
 						class_defs['signals'].append((name, args))
@@ -276,22 +293,22 @@ def parse_header(index, scons_file, src, auto_methods):
 					case 'GRPC':
 						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
-		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
+							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
-						macro_args = get_macro_args(file, macro)
+						macro_args = get_macro_args(filecontent, macro)
 						rpc_mode, transfer_mode, call_local, channel = None, None, None, None
 
 						if len(macro_args) != 0 and macro_args[-1].isnumeric():
 							if len(macro_args) < 3:
 								raise CppScriptException('{}:{}:{}: error: channel id must come with explicit rpc_mode and transfer_mode'
-			       					.format(str(scons_file), macro.location.line, macro.location.column))
+								.format(filename, macro.location.line, macro.location.column))
 
 						for arg in macro_args:
 							match arg:
 								case ('any_peer' | 'authority') as mode:
 									if rpc_mode != None:
 										raise CppScriptException('{}:{}:{}: error: duplicate rpc mode keyword usage'
-		       								.format(str(scons_file), macro.location.line, macro.location.column)) 
+										.format(filename, macro.location.line, macro.location.column)) 
 
 									rpc_mode = mode.upper()
 
@@ -299,7 +316,7 @@ def parse_header(index, scons_file, src, auto_methods):
 								case ('reliable' | 'unreliable' | 'unreliable_ordered') as mode:
 									if transfer_mode != None:
 										raise CppScriptException('{}:{}:{}: error: duplicate transfer mode keyword usage'
-		       								.format(str(scons_file), macro.location.line, macro.location.column))
+										.format(filename, macro.location.line, macro.location.column))
 
 									transfer_mode = mode.upper()
 
@@ -308,18 +325,18 @@ def parse_header(index, scons_file, src, auto_methods):
 									mode = 'true' if mode == 'call_local' else 'false'
 									if call_local != None:
 										raise CppScriptException('{}:{}:{}: error: duplicate call mode keyword usage'
-		       								.format(str(scons_file), macro.location.line, macro.location.column))
+										.format(filename, macro.location.line, macro.location.column))
 
 									call_local = mode
 
 								case _:
 									if not arg.isnumeric():
 										raise CppScriptException('{}:{}:{}: error: "{}" is not a keyword or channel id'
-		       								.format(str(scons_file), macro.location.line, macro.location.column, arg))
+										.format(filename, macro.location.line, macro.location.column, arg))
 
 									if channel != None:
 										raise CppScriptException('{}:{}:{}: error: duplicate channel id usage'
-		       								.format(str(scons_file), macro.location.line, macro.location.column))
+										.format(filename, macro.location.line, macro.location.column))
 
 									channel = arg
 
@@ -334,9 +351,9 @@ def parse_header(index, scons_file, src, auto_methods):
 					case 'GVARARG':
 						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
-		       					.format(str(scons_file), macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
+							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
-						properties['varargs'] = get_pair_arglist(get_macro_args(file, macro), 'Variant')
+						properties['varargs'] = get_pair_arglist(get_macro_args(filecontent, macro), 'Variant')
 					
 					case 'GIGNORE':
 						is_ignored = True
@@ -355,9 +372,9 @@ def parse_header(index, scons_file, src, auto_methods):
 						properties |= {	'name' : item.spelling,
 								'bind_name' : item.spelling,
 								'return' : item.result_type.spelling,
-								'args' : [(arg.type.spelling, arg.spelling, find_default_arg(file, arg)) for arg in item.get_arguments()],
+								'args' : [(arg.type.spelling, arg.spelling, find_default_arg(filecontent, arg)) for arg in item.get_arguments()],
 								'is_static' : item.is_static_method(),
-		     						'is_virtual' : item.is_virtual_method()
+								'is_virtual' : item.is_virtual_method()
 								}
 						class_defs['methods'].append(properties)
 
@@ -378,7 +395,7 @@ def parse_header(index, scons_file, src, auto_methods):
 						properties |= { 'name': item.spelling,
 								'group' : group,
 								'subgroup' : subgroup,
-		     						'is_static' : item.is_static_method()
+								'is_static' : item.is_static_method()
 								}
 
 						class_defs['properties'].append(properties)
@@ -389,7 +406,7 @@ def parse_header(index, scons_file, src, auto_methods):
 		for macro in leftover:
 			if macro.spelling not in ['GSIGNAL', 'GGROUP', 'GSUBGROUP']:
 				raise CppScriptException('{}:{}:{}: error: macro without target member'
-		   		.format(str(scons_file), macro.location.line, macro.location.column))
+				.format(filename, macro.location.line, macro.location.column))
 		process_macros(None, leftover, None)
 
 
@@ -398,9 +415,9 @@ def parse_header(index, scons_file, src, auto_methods):
 	return parsed_classes
 
 
-def parse_and_write_header(index, scons_file, src, auto_methods):
-	defs = parse_header(index, scons_file, src, auto_methods)
-	write_header(str(scons_file), defs, src)
+def parse_and_write_header(index, filename, filecontent, env):
+	defs = parse_header(index, filename, filecontent, env['src'], env['auto_methods'])
+	write_header(filename, defs, env['src'])
 	return defs
 
 
@@ -512,7 +529,7 @@ def write_header(file, defs, src):
 		fileopen.write(content)
 
 
-def write_register_header(defs, src, target):		
+def write_register_header(defs, src, target):
 	scripts_header = ''
 
 	# Pairs of (base_class_name, register_str) to ensure
@@ -527,10 +544,10 @@ def write_register_header(defs, src, target):
 		for class_name, content in classes.items():
 			for i in range(len(classes_register)):
 				if class_name == classes_register[i][0]:
-					classes_register.insert(i, (content['base'], f"	GDREGISTER_{content['type']}({class_name});\n"))
+					classes_register.insert(i, (content['base'], f"\tGDREGISTER_{content['type']}({class_name});\n"))
 					break
 			else:
-				classes_register.append((content['base'], f"	GDREGISTER_{content['type']}({class_name});\n"))
+				classes_register.append((content['base'], f"\tGDREGISTER_{content['type']}({class_name});\n"))
 
 
 	scripts_header += '\nusing namespace godot;\n\n'
