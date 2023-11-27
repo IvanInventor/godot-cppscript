@@ -256,7 +256,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 						properties |= {
 								'setter' : args[0],
 								'getter' : args[1],
-								'hint' : 'PROPERTY_HINT_' + args[2].upper() if len(args) > 2 else 'PROPERTY_HINT_NONE',
+								'hint' : 'PROPERTY_HINT_' + args[2].upper() if len(args) > 2 else None,
 								'hint_string' : args[3] if len(args) > 3 else '""'
 								}
 						is_ignored = False
@@ -432,13 +432,13 @@ def write_header(file, defs, src):
 				args = ''.join(f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args'])
 				defvals = ''.join(f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != '')
 				if method['is_static']:
-					Hstatic_method += f'\tClassDB::bind_static_method("{class_name}", D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
+					Hstatic_method += f'\tStaticMethod<&{class_name}::{method["name"]}{defvals}>::bind("{class_name}", D_METHOD("{method["bind_name"]}"{args}));\n'
 
 				elif method['is_virtual']:
-					Hvirtual_method += f'\tBIND_VIRTUAL_METHOD({class_name}, {method["bind_name"]});\n'
+					Hvirtual_method += f'\tMethod<&{class_name}::{method["name"]}>::bind_virtual("{method["bind_name"]}"{defvals});\n'
 
 				else:
-					Hmethod += f'\tClassDB::bind_method(D_METHOD("{method["bind_name"]}"{args}), &{class_name}::{method["name"]}{defvals});\n'
+					Hmethod += f'\tMethod<&{class_name}::{method["name"]}>::bind(D_METHOD("{method["bind_name"]}"{args}){defvals});\n'
 
 				if 'rpc_config' in method.keys():
 					header_rpc_config += f"""	{{
@@ -451,24 +451,19 @@ def write_header(file, defs, src):
 	}}
 """
 			else:
-				args_list = '\n'.join(f'\tmi.arguments.push_back(PropertyInfo(GetTypeInfo<{type}>::VARIANT_TYPE, "{name}"));' for type, name in method['varargs'])
+				args_list = '\n'.join(f'\t\t,MakePropertyInfo<{type}>("{name}")' for type, name in method['varargs'])
 
-				Hvaragr_method += f"""	{{
-	MethodInfo mi;
-	mi.name = "{method["name"]}";
-{args_list}
-	ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "{method["bind_name"]}", &{class_name}::{method["name"]}, mi);
-	}}
-"""
+				Hvaragr_method += f'\tMethod<&{class_name}::{method["name"]}>::bind_vararg("{method["bind_name"]}"' + ('\n' + args_list + '\n\t\t);\n' if args_list != '' else ');\n')
+
 		prev_group, prev_subgroup = '', ''
 		for prop in content['properties']:
 			if prop['getter'] not in methods_list:
-				Hmethod += f'\tClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::{prop["getter"]});\n'
+				Hmethod += f'\tMethod<&{class_name}::{prop["getter"]}>::bind(D_METHOD("{prop["getter"]}"));\n'
 				property_set_get_defs += f'GENERATE_GETTER({class_name_full}::{prop["getter"]}, {class_name_full}::{prop["name"]});\n'
 				property_macro += f'\nGENERATE_GETTER_DECLARATION({prop["getter"]}, {prop["name"]})'
 
 			if prop['setter'] not in methods_list:
-				Hmethod += f'\tClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::{prop["setter"]});\n'
+				Hmethod += f'\tMethod<&{class_name}::{prop["setter"]}>::bind(D_METHOD("{prop["setter"]}", "value"));\n'
 				property_set_get_defs += f'GENERATE_SETTER({class_name_full}::{prop["setter"]}, {class_name_full}::{prop["name"]});\n'
 				property_macro += f'\nGENERATE_SETTER_DECLARATION({prop["setter"]}, {prop["name"]})'
 
@@ -484,12 +479,13 @@ def write_header(file, defs, src):
 				prev_subgroup = subgroup
 
 			prop_name = group_ + subgroup_ + prop['name']
-			Hprop += f'\t\tADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, {prop["hint_string"]}), "{prop["setter"]}", "{prop["getter"]}");\n'
+			hints = f', {prop["hint"]}, {prop["hint_string"]}' if prop['hint'] != None else ''
+			Hprop += f'\t\tADD_PROPERTY(MakePropertyInfo<decltype({prop["name"]})>("{prop_name}"{hints}), "{prop["setter"]}", "{prop["getter"]}");\n'
 
 		defs[class_name_full]['property_defs'] = property_macro
 
 		for signal_name, args in content['signals']:
-			args_str = ''.join(f', PropertyInfo(GetTypeInfo<{arg_type}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args)
+			args_str = ''.join(f', MakePropertyInfo<{arg_type}>("{arg_name}")' for arg_type, arg_name in args)
 			Hsignal += f'\tADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));\n'
 
 		for enum, consts in content['enum_constants'].items():
@@ -507,7 +503,7 @@ def write_header(file, defs, src):
 
 		header_rpc_config = 'void {}::_rpc_config() {{{}}}\n'.format(
 				class_name_full, '\n' + header_rpc_config if header_rpc_config != '' else '')
-		header_bind_methods = '\n\n'.join(i for i in [Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '')
+		header_bind_methods = '\n\n'.join(i for i in [Hmethod, Hvirtual_method, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '')
 		header_defs += [f'// {class_name_full} : {content["base"]}\n',
 			'void {}::_bind_methods() {{{}}}\n'.format(
 			class_name_full, '\n' + header_bind_methods if header_bind_methods != '' else ''),
@@ -517,7 +513,7 @@ def write_header(file, defs, src):
 
 	file_name = filename_to_gen_filename(file, src)
 	if len(defs) != 0:
-		header_include = '#include <{}>\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, src).replace('\\', '/'))
+		header_include = '#include <cppscript_bindings.h>\n\n#include <{}>\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, src).replace('\\', '/'))
 		content = header_include + '\n'.join(header_defs)
 
 	os.makedirs(os.path.dirname(file_name), exist_ok=True)
