@@ -180,47 +180,42 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 				case _:
 					parse_class(cursor, class_cursors)
 
-	def parse_cursor(parent, namespace):
+	def parse_cursor(parent):
 		for cursor in parent.get_children():
 			match cursor.kind:
 				case clang.cindex.CursorKind.CLASS_DECL:
-					classes_and_Gmacros.append((cursor, ''.join(n + '::' for n in namespace)))
+					classes_and_Gmacros.append(cursor)
 
 				case clang.cindex.CursorKind.MACRO_INSTANTIATION:
 					if cursor.spelling in KEYWORDS:
 						keyword_macros.append(cursor)
 
 					elif cursor.spelling in ['GCLASS', 'GVIRTUAL_CLASS', 'GABSTRACT_CLASS']:
-						classes_and_Gmacros.append((cursor, None))
-
-				case clang.cindex.CursorKind.NAMESPACE:
-					parse_cursor(cursor, namespace + [cursor.spelling])
+						classes_and_Gmacros.append(cursor)
 
 				case _:
-					parse_cursor(cursor, namespace)
+					parse_cursor(cursor)
 
-	parse_cursor(translation_unit.cursor, [])
-	found_class = sorted(classes_and_Gmacros, key=lambda x: x[0].extent.start.offset, reverse=True)	
+	parse_cursor(translation_unit.cursor)
+	found_class = sorted(classes_and_Gmacros, key=lambda x: x.extent.start.offset, reverse=True)	
 	classes = []
-	def add_class(cursor_t, macros_t):
-		cursor, namespace = cursor_t
-
-		if len(macros_t) > 1:
-			wrong_macro = macros_t[0][0]
+	def add_class(cursor, macros):
+		if len(macros) > 1:
+			wrong_macro = macros[-2]
 			raise CppScriptException('{}:{}:{}: error: repeated class macro for "{}" class defined at {}:{}'
 			.format(filename, wrong_macro.location.line, wrong_macro.location.column, cursor.spelling, cursor.location.line, cursor.location.column))
 
 		
-		for macro, _ in macros_t:
-			classes.append((cursor, get_macro_args(filecontent, macro)[1], macro.spelling[1:], namespace))
+		for macro in macros:
+			classes.append((cursor, get_macro_args(filecontent, macro)[1], macro.spelling[1:]))
 
 
-	collapse_list(found_class, lambda x: x[0].kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
+	collapse_list(found_class, lambda x: x.kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
 		
 	parsed_classes = {}
-	for cursor, base, type, namespace in classes:
+	for cursor, base, type in classes:
 		class_defs = {
-			'namespace' : namespace,
+			'class_name' : cursor.spelling,
 			'base' : base,
 			'type' : type,
 			'methods' : [],
@@ -410,7 +405,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 		process_macros(None, leftover, None)
 
 
-		parsed_classes[cursor.spelling] = class_defs
+		parsed_classes[cursor.type.spelling] = class_defs
 
 	return parsed_classes
 
@@ -423,7 +418,8 @@ def parse_and_write_header(index, filename, filecontent, env):
 
 def write_header(file, defs, src):
 	header_defs = []
-	for class_name, content in defs.items():
+	for class_name_full, content in defs.items():
+		class_name = content['class_name']
 		Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', ''
 		outside_bind = ''
 		header_rpc_config = ''
@@ -468,12 +464,12 @@ def write_header(file, defs, src):
 		for prop in content['properties']:
 			if prop['getter'] not in methods_list:
 				Hmethod += f'\tClassDB::bind_method(D_METHOD("{prop["getter"]}"), &{class_name}::{prop["getter"]});\n'
-				property_set_get_defs += f'GENERATE_GETTER({class_name}::{prop["getter"]}, {class_name}::{prop["name"]});\n'
+				property_set_get_defs += f'GENERATE_GETTER({class_name_full}::{prop["getter"]}, {class_name_full}::{prop["name"]});\n'
 				property_macro += f'\nGENERATE_GETTER_DECLARATION({prop["getter"]}, {prop["name"]})'
 
 			if prop['setter'] not in methods_list:
 				Hmethod += f'\tClassDB::bind_method(D_METHOD("{prop["setter"]}", "value"), &{class_name}::{prop["setter"]});\n'
-				property_set_get_defs += f'GENERATE_SETTER({class_name}::{prop["setter"]}, {class_name}::{prop["name"]});\n'
+				property_set_get_defs += f'GENERATE_SETTER({class_name_full}::{prop["setter"]}, {class_name_full}::{prop["name"]});\n'
 				property_macro += f'\nGENERATE_SETTER_DECLARATION({prop["setter"]}, {prop["name"]})'
 
 			group, subgroup = prop['group'], prop['subgroup']
@@ -490,7 +486,7 @@ def write_header(file, defs, src):
 			prop_name = group_ + subgroup_ + prop['name']
 			Hprop += f'\t\tADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype({prop["name"]})>::VARIANT_TYPE, "{prop_name}", {prop["hint"]}, {prop["hint_string"]}), "{prop["setter"]}", "{prop["getter"]}");\n'
 
-		defs[class_name]['property_defs'] = property_macro
+		defs[class_name_full]['property_defs'] = property_macro
 
 		for signal_name, args in content['signals']:
 			args_str = ''.join(f', PropertyInfo(GetTypeInfo<{arg_type}>::VARIANT_TYPE, "{arg_name}")' for arg_type, arg_name in args)
@@ -510,11 +506,11 @@ def write_header(file, defs, src):
 			Hconst += f'\tBIND_CONSTANT({const});\n'
 
 		header_rpc_config = 'void {}::_rpc_config() {{{}}}\n'.format(
-				class_name, '\n' + header_rpc_config if header_rpc_config != '' else '')
+				class_name_full, '\n' + header_rpc_config if header_rpc_config != '' else '')
 		header_bind_methods = '\n\n'.join(i for i in [Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '')
-		header_defs += [f'// {class_name} : {content["base"]}\n',
+		header_defs += [f'// {class_name_full} : {content["base"]}\n',
 			'void {}::_bind_methods() {{{}}}\n'.format(
-			class_name, '\n' + header_bind_methods if header_bind_methods != '' else ''),
+			class_name_full, '\n' + header_bind_methods if header_bind_methods != '' else ''),
 			header_rpc_config] + \
 			([property_set_get_defs] if property_set_get_defs != '' else []) + \
 			([outside_bind] if outside_bind != '' else [])
@@ -563,8 +559,8 @@ def write_register_header(defs, src, target):
 def write_property_header(new_defs, filepath):
 	body = ''
 	for _, file in new_defs.items():
-		for class_name, content in file.items():
-			body += f'#define GSETGET_{class_name}_{content["base"]}' + content['property_defs'].replace('\n', ' \\\n') + '\n\n'
+		for class_name_full, content in file.items():
+			body += f'#define GSETGET_{content["class_name"]}_{content["base"]}' + content['property_defs'].replace('\n', ' \\\n') + '\n\n'
 	
 	with open(filepath, 'w') as file:
 		file.write(body)
