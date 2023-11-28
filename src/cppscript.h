@@ -12,7 +12,7 @@ static void _bind_methods();										\
 protected:												\
 void _rpc_config();											\
 public:													\
-GSETGET_ ## CLASS_NAME ## _ ## CLASS_NAME_INH						\
+GSETGET_ ## CLASS_NAME											\
 private:
 
 #define GVIRTUAL_CLASS(CLASS_NAME, CLASS_NAME_INH) GCLASS(CLASS_NAME, CLASS_NAME_INH)

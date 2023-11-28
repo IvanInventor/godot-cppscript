@@ -556,7 +556,7 @@ def write_property_header(new_defs, filepath):
 	body = ''
 	for _, file in new_defs.items():
 		for class_name_full, content in file.items():
-			body += f'#define GSETGET_{content["class_name"]}_{content["base"]}' + content['property_defs'].replace('\n', ' \\\n') + '\n\n'
+			body += f'#define GSETGET_{content["class_name"]}' + content['property_defs'].replace('\n', ' \\\n') + '\n\n'
 	
 	with open(filepath, 'w') as file:
 		file.write(body)
