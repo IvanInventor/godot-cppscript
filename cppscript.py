@@ -533,13 +533,18 @@ def write_register_header(defs, src, target):
 			continue
 
 		scripts_header += '#include <{}>\n'.format(os.path.relpath(file, src).replace('\\', '/'))
-		for class_name, content in classes.items():
+		for class_name_full, content in classes.items():
+			class_name = content['class_name']
+			base = content['base']
+			dots = base.rfind(':')
+			base = base if dots == -1 else base[dots+1:]
+			print(class_name, base)
 			for i in range(len(classes_register)):
 				if class_name == classes_register[i][0]:
-					classes_register.insert(i, (content['base'], f"\tGDREGISTER_{content['type']}({class_name});\n"))
+					classes_register.insert(i, (base, f"\tGDREGISTER_{content['type']}({class_name_full});\n"))
 					break
 			else:
-				classes_register.append((content['base'], f"\tGDREGISTER_{content['type']}({class_name});\n"))
+				classes_register.append((base, f"\tGDREGISTER_{content['type']}({class_name_full});\n"))
 
 
 	scripts_header += '\nusing namespace godot;\n\n'
