@@ -3,6 +3,9 @@
 
 #include <type_traits>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/classes/ref.hpp>
+#include <godot_cpp/classes/resource.hpp>
+
 
 namespace impl {
 
@@ -68,6 +71,21 @@ constexpr auto is_function_signature_supported(Ret (*func)(Args...)) {
 	return FunctionSignature<decltype(func)>();
 }
 
+template<class T>
+struct IsResourceProperty;
+
+template<class T>
+struct IsResourceProperty {
+	static constexpr bool value = godot::TypeInherits<godot::Resource, T>::value;
+	using type = T;
+};
+
+template<class T>
+struct IsResourceProperty<godot::Ref<T>> {
+	static constexpr bool value = godot::TypeInherits<godot::Resource, T>::value;
+	using type = T;
+};
+
 
 template<bool b>
 struct BindCheck;
@@ -120,9 +138,15 @@ struct BindCheck<false> {
 };
 
 template<class T, class ...Args>
-godot::PropertyInfo MakePropertyInfo(Args&&... args) {
+_FORCE_INLINE_ godot::PropertyInfo MakePropertyInfo(Args&&... args) {
 	static_assert(impl::assert_is_supported_type_v<T>, "Property of this type is not supported");
-	return impl::BindCheck<impl::assert_is_supported_type_v<T>>::template MakePropertyInfo<T>(std::forward<Args>(args)...);
+	
+	using IsResource = impl::IsResourceProperty<T>;
+	if constexpr(sizeof...(Args) == 1 && IsResource::value) {
+		return impl::BindCheck<impl::assert_is_supported_type_v<T>>::template MakePropertyInfo<T>(std::forward<Args>(args)..., godot::PROPERTY_HINT_RESOURCE_TYPE, IsResource::type::get_class_static());
+	} else {
+		return impl::BindCheck<impl::assert_is_supported_type_v<T>>::template MakePropertyInfo<T>(std::forward<Args>(args)...);
+	}
 }
 
 template<auto Ptr>
