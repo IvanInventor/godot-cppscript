@@ -523,9 +523,6 @@ def write_header(file, defs, src):
 
 def write_register_header(defs, src, target):
 	scripts_header = ''
-
-	# Pairs of (base_class_name, register_str) to ensure
-	# parent classes ane registered before children
 	classes_register = []
 
 	for file, classes in defs.items():
@@ -534,11 +531,11 @@ def write_register_header(defs, src, target):
 
 		scripts_header += '#include <{}>\n'.format(os.path.relpath(file, src).replace('\\', '/'))
 		for class_name_full, content in classes.items():
-			class_name = content['class_name']
-			base = content['base']
+			# Ensure parent classes are registered before children
+			# by iterating throught pairs of (base_name, register_str)
+			class_name, base = content['class_name'], content['base']
 			dots = base.rfind(':')
 			base = base if dots == -1 else base[dots+1:]
-			print(class_name, base)
 			for i in range(len(classes_register)):
 				if class_name == classes_register[i][0]:
 					classes_register.insert(i, (base, f"\tGDREGISTER_{content['type']}({class_name_full});\n"))
