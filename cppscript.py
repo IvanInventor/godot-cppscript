@@ -156,6 +156,29 @@ def generate_header(target, source, env):
 		return 1
 
 
+def generate_header_cmake(target, source, env):
+	index = clang.cindex.Index.create()
+	try:
+		os.remove(os.path.join(env['src'], 'properties.gen.h'))
+	except:
+		pass
+	
+	try:
+		cached_defs = load_defs_json(env['defs_file'])
+		new_defs = {str(s) : parse_and_write_header(index, *get_file_cmake(s), env) for s in source}
+		
+		write_register_header(new_defs, env['src'], str(target[0]))
+		write_property_header(new_defs, os.path.join(env['src'], 'properties.gen.h'))
+
+		with open(env['defs_file'], 'w') as file:
+			json.dump(new_defs, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
+		
+	except CppScriptException as e:
+		print(f'\n{e}\n', file=sys.stderr)
+		return 1
+	
+	return 0
+
 def parse_header(index, filename, filecontent, src, auto_methods):
 	translation_unit = index.parse(filename, args=[f'-I{src}', '-Isrc', '-DGDCLASS'], unsaved_files=[(filename, filecontent)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
