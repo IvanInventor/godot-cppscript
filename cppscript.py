@@ -446,7 +446,7 @@ def write_header(file, defs, src):
 		Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', ''
 		outside_bind = ''
 		header_rpc_config = ''
-		property_macro = ''
+		gen_setters, gen_getters = [], []
 		property_set_get_defs = ''
 		methods_list = [method['bind_name'] for method in content['methods']]
 
@@ -483,12 +483,12 @@ def write_header(file, defs, src):
 			if prop['getter'] not in methods_list:
 				Hmethod += f'\tMethod<&{class_name}::{prop["getter"]}>::bind(D_METHOD("{prop["getter"]}"));\n'
 				property_set_get_defs += f'GENERATE_GETTER({class_name_full}::{prop["getter"]}, {class_name_full}::{prop["name"]});\n'
-				property_macro += f'\nGENERATE_GETTER_DECLARATION({prop["getter"]}, {prop["name"]})'
+				gen_getters.append([prop["getter"], prop["name"]])
 
 			if prop['setter'] not in methods_list:
 				Hmethod += f'\tMethod<&{class_name}::{prop["setter"]}>::bind(D_METHOD("{prop["setter"]}", "value"));\n'
 				property_set_get_defs += f'GENERATE_SETTER({class_name_full}::{prop["setter"]}, {class_name_full}::{prop["name"]});\n'
-				property_macro += f'\nGENERATE_SETTER_DECLARATION({prop["setter"]}, {prop["name"]})'
+				gen_setters.append([prop["setter"], prop["name"]])
 
 			group, subgroup = prop['group'], prop['subgroup']
 			group_ = group_name(group)
@@ -505,7 +505,8 @@ def write_header(file, defs, src):
 			hints = f', {prop["hint"]}, {prop["hint_string"]}' if prop['hint'] != None else ''
 			Hprop += f'\t\tADD_PROPERTY(MakePropertyInfo<decltype({prop["name"]})>("{prop_name}"{hints}), "{prop["setter"]}", "{prop["getter"]}");\n'
 
-		defs[class_name_full]['property_defs'] = property_macro
+		defs[class_name_full]['gen_setters'] = gen_setters
+		defs[class_name_full]['gen_getters'] = gen_getters
 
 		for signal_name, args in content['signals']:
 			args_str = ''.join(f', MakePropertyInfo<{arg_type}>("{arg_name}")' for arg_type, arg_name in args)
@@ -581,7 +582,8 @@ def write_property_header(new_defs, filepath):
 	body = ''
 	for _, file in new_defs.items():
 		for class_name_full, content in file.items():
-			body += f'#define GSETGET_{content["class_name"]}' + content['property_defs'].replace('\n', ' \\\n') + '\n\n'
+			gen_setgets = [f' \\\nGENERATE_GETTER_DECLARATION({g}, {n})' for g, n in content['gen_getters']] + [f' \\\nGENERATE_SETTER_DECLARATION({g}, {n})' for g, n in content['gen_setters']]
+			body += f'#define GSETGET_{content["class_name"]}' + ''.join(gen_setgets) + '\n\n'
 	
 	with open(filepath, 'w') as file:
 		file.write(body)
