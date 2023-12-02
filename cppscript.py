@@ -121,6 +121,15 @@ def get_file_cmake(filename):
 
 	return filename, filecontent
 
+
+def is_virtual_method(cursor):
+	for token in cursor.get_tokens():
+		if (token.kind, token.spelling) in [(clang.cindex.TokenKind.IDENTIFIER, "override"), (clang.cindex.TokenKind.KEYWORD, "virtual")]:
+			return True
+
+	return False
+
+
 # Builder
 def generate_header_emitter(target, source, env):
 	return [env.File(env['gen_header'])] + [env.File(filename_to_gen_filename(str(i), env['src'])) for i in source], source
@@ -191,7 +200,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 		for cursor in parent.get_children():
 			match cursor.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
-					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC and not (cursor.is_virtual_method() and cursor.spelling.startswith('_')):
+					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
 						class_cursors.append(cursor)
 					
 				case clang.cindex.CursorKind.FIELD_DECL:
@@ -385,14 +394,15 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 			properties = None
 			match item.kind:
 				case clang.cindex.CursorKind.CXX_METHOD:
+					is_virtual = is_virtual_method(item)
 					properties = {}
-					if process_macros(item, macros, properties, not auto_methods):
+					if process_macros(item, macros, properties, (is_virtual and item.spelling.startswith('_')) or not auto_methods):
 						properties |= {	'name' : item.spelling,
 								'bind_name' : item.spelling,
 								'return' : item.result_type.spelling,
 								'args' : [(arg.type.spelling, arg.spelling, find_default_arg(filecontent, arg)) for arg in item.get_arguments()],
 								'is_static' : item.is_static_method(),
-								'is_virtual' : item.is_virtual_method()
+								'is_virtual' : is_virtual
 								}
 						class_defs['methods'].append(properties)
 
