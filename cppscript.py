@@ -5,6 +5,7 @@ import os, sys, json
 
 
 KEYWORDS = ['GPROPERTY', 'GMETHOD', 'GGROUP', 'GSUBGROUP', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE']
+INIT_LEVELS = ['GINIT_LEVEL_CORE', 'GINIT_LEVEL_SERVERS', 'GINIT_LEVEL_SCENE', 'GINIT_LEVEL_EDITOR']
 
 # Helpers
 class CppScriptException(Exception):
@@ -222,6 +223,9 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 					if cursor.spelling in KEYWORDS:
 						keyword_macros.append(cursor)
 
+					elif cursor.spelling in INIT_LEVELS:
+						keyword_macros.append(cursor)
+
 					elif cursor.spelling in ['GCLASS', 'GVIRTUAL_CLASS', 'GABSTRACT_CLASS']:
 						classes_and_Gmacros.append(cursor)
 
@@ -250,6 +254,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 			'class_name' : cursor.spelling,
 			'base' : base,
 			'type' : type,
+			'init_level' : 'SCENE',
 			'methods' : [],
 			'properties' : [],
 			'signals' : [],
@@ -267,6 +272,9 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 			nonlocal group
 			nonlocal subgroup
 			for macro in macros:
+				if macro.spelling in INIT_LEVELS:
+					class_defs['init_level'] = macro.spelling[12:]
+
 				match macro.spelling:
 					case 'GMETHOD':
 						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
@@ -557,7 +565,7 @@ def write_header(file, defs, src):
 
 def write_register_header(defs, src, target):
 	scripts_header = ''
-	classes_register = []
+	classes_register_levels = {name[12:] : [] for name in INIT_LEVELS}
 
 	for file, classes in defs.items():
 		if len(classes) == 0:
@@ -567,6 +575,7 @@ def write_register_header(defs, src, target):
 		for class_name_full, content in classes.items():
 			# Ensure parent classes are registered before children
 			# by iterating throught pairs of (base_name, register_str)
+			classes_register = classes_register_levels[content['init_level']]
 			class_name, base = content['class_name'], content['base']
 			dots = base.rfind(':')
 			base = base if dots == -1 else base[dots+1:]
@@ -579,10 +588,13 @@ def write_register_header(defs, src, target):
 
 
 	scripts_header += '\nusing namespace godot;\n\n'
-	header_register = ''.join(i for _, i in classes_register)
-	header_register = 'inline void register_script_classes() {{{}}}\n'.format(
-			'\n' + header_register if header_register != '' else '')
-	scripts_header += header_register
+	classes_register_str = ''
+	for level_name, defs in classes_register_levels.items():
+		registers = ''.join(i for _, i in defs)
+		classes_register_str += '_FORCE_INLINE_ void _register_level_{}() {{{}}}\n\n'.format(
+			level_name.lower(), '\n' + registers if registers != '' else '')
+
+	scripts_header += classes_register_str
 
 	with open(target, 'w') as file:
 		file.write(scripts_header)

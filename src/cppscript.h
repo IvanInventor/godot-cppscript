@@ -44,5 +44,9 @@ void function(decltype(property) value) {	\
 #define GRPC(...)
 #define GVARARG(...)
 #define GIGNORE(...)
+#define GINIT_LEVEL_CORE(...)
+#define GINIT_LEVEL_SERVERS(...)
+#define GINIT_LEVEL_SCENE(...)
+#define GINIT_LEVEL_EDITOR(...)
 
 #endif // CPPSCRIPT_H

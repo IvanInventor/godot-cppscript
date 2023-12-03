@@ -15,19 +15,37 @@ using namespace godot;
 
 
 void initialize_scripts_module(ModuleInitializationLevel p_level) {
-	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
-		return;
+	switch (p_level) {
+		case MODULE_INITIALIZATION_LEVEL_CORE:
+			_register_level_core();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_SERVERS:
+			_register_level_servers();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_SCENE:
+			_register_level_scene();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_EDITOR:
+			_register_level_editor();
+			break;
+		default:
+			break;
 	}
-	// Write your custom init code here
-	register_script_classes();
-
 }
 
 void uninitialize_scripts_module(ModuleInitializationLevel p_level) {
-	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
-		return;
+	switch (p_level) {
+		case MODULE_INITIALIZATION_LEVEL_CORE:
+			break;
+		case MODULE_INITIALIZATION_LEVEL_SERVERS:
+			break;
+		case MODULE_INITIALIZATION_LEVEL_SCENE:
+			break;
+		case MODULE_INITIALIZATION_LEVEL_EDITOR:
+			break;
+		default:
+			break;
 	}
-	// Write your custom deinit code here
 }
 
 extern "C" {
