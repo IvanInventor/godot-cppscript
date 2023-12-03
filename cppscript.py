@@ -519,8 +519,8 @@ def write_header(file, defs, src):
 		defs[class_name_full]['gen_getters'] = gen_getters
 
 		for signal_name, args in content['signals']:
-			args_str = ''.join(f', MakePropertyInfo<{arg_type}>("{arg_name}")' for arg_type, arg_name in args)
-			Hsignal += f'\tADD_SIGNAL(MethodInfo("{signal_name}"{args_str}));\n'
+			args_str = '\n'.join(f'\t\t,MakePropertyInfo<{arg_type}>("{arg_name}")' for arg_type, arg_name in args)
+			Hsignal += f'\tADD_SIGNAL(MethodInfo("{signal_name}"' + ('\n' + args_str + '\n\t\t' if args_str != '' else '') + '));\n'
 
 		for enum, consts in content['enum_constants'].items():
 			outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
