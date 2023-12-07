@@ -1,4 +1,5 @@
-import argparse, sys
+import argparse, os, sys
+os.environ['NOT_SCONS'] = '1'
 from cppscript import generate_header_cmake
 
 parser = argparse.ArgumentParser(

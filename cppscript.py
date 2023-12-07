@@ -1,7 +1,17 @@
-from SCons.Script import *
-import clang.cindex
+from clang.cindex import Index, TranslationUnit, CursorKind, TokenKind, AccessSpecifier
 import os, sys, json
 
+if 'NOT_SCONS' not in os.environ.keys():
+	from SCons.Script import Glob
+	def GlobRecursive(path, pattern, **kwargs):
+		found = []
+		for root, dirs, files in os.walk(path):
+			if not os.path.basename(root).startswith('.'):
+				found += Glob(root + '/' + pattern, **kwargs)
+			else:
+				dirs[:] = []
+
+		return found
 
 
 KEYWORDS = ['GPROPERTY', 'GMETHOD', 'GGROUP', 'GSUBGROUP', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE']
@@ -60,17 +70,6 @@ def get_macro_body(file, macro):
 	return str_from_file(file, macro.extent.start.offset + len(macro.spelling) + 1, macro.extent.end.offset - 1)
 
 
-def GlobRecursive(path, pattern, **kwargs):
-	found = []
-	for root, dirs, files in os.walk(path):
-		if not os.path.basename(root).startswith('.'):
-			found += Glob(root + '/' + pattern, **kwargs)
-		else:
-			dirs[:] = []
-	
-	return found
-
-
 def get_macro_args(file, macro):
 	args_str = get_macro_body(file, macro)
 
@@ -125,7 +124,7 @@ def get_file_cmake(filename):
 
 def is_virtual_method(cursor):
 	for token in cursor.get_tokens():
-		if (token.kind, token.spelling) in [(clang.cindex.TokenKind.IDENTIFIER, "override"), (clang.cindex.TokenKind.KEYWORD, "virtual")]:
+		if (token.kind, token.spelling) in [(TokenKind.IDENTIFIER, "override"), (TokenKind.KEYWORD, "virtual")]:
 			return True
 
 	return False
@@ -137,7 +136,7 @@ def generate_header_emitter(target, source, env):
 
 
 def generate_header(target, source, env):
-	index = clang.cindex.Index.create()
+	index = Index.create()
 	try:
 		os.remove(os.path.join(env['src'], 'properties.gen.h'))
 	except:
@@ -167,7 +166,7 @@ def generate_header(target, source, env):
 
 
 def generate_header_cmake(target, source, env):
-	index = clang.cindex.Index.create()
+	index = Index.create()
 	try:
 		os.remove(os.path.join(env['src'], 'properties.gen.h'))
 	except:
@@ -190,7 +189,7 @@ def generate_header_cmake(target, source, env):
 	return 0
 
 def parse_header(index, filename, filecontent, src, auto_methods):
-	translation_unit = index.parse(filename, args=[f'-I{src}', '-Isrc', '-DGDCLASS'], unsaved_files=[(filename, filecontent)], options=clang.cindex.TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+	translation_unit = index.parse(filename, args=[f'-I{src}', '-Isrc', '-DGDCLASS'], unsaved_files=[(filename, filecontent)], options=TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
 		raise CppScriptException("{filename}: failed to create translation unit")
@@ -200,26 +199,25 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 	def parse_class(parent, class_cursors):
 		for cursor in parent.get_children():
 			match cursor.kind:
-				case clang.cindex.CursorKind.CXX_METHOD:
-					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
+				case CursorKind.CXX_METHOD:
+					if cursor.access_specifier == AccessSpecifier.PUBLIC:
 						class_cursors.append(cursor)
 					
-				case clang.cindex.CursorKind.FIELD_DECL:
+				case CursorKind.FIELD_DECL:
 					class_cursors.append(cursor)
 
-				case clang.cindex.CursorKind.ENUM_DECL:
-					if cursor.access_specifier == clang.cindex.AccessSpecifier.PUBLIC:
+				case CursorKind.ENUM_DECL:
+					if cursor.access_specifier == AccessSpecifier.PUBLIC:
 						class_cursors.append(cursor)
-				case _:
-					parse_class(cursor, class_cursors)
+
 
 	def parse_cursor(parent):
 		for cursor in parent.get_children():
 			match cursor.kind:
-				case clang.cindex.CursorKind.CLASS_DECL:
+				case CursorKind.CLASS_DECL:
 					classes_and_Gmacros.append(cursor)
 
-				case clang.cindex.CursorKind.MACRO_INSTANTIATION:
+				case CursorKind.MACRO_INSTANTIATION:
 					if cursor.spelling in KEYWORDS:
 						keyword_macros.append(cursor)
 
@@ -246,7 +244,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 			classes.append((cursor, get_macro_args(filecontent, macro)[1], macro.spelling[1:]))
 
 
-	collapse_list(found_class, lambda x: x.kind == clang.cindex.CursorKind.CLASS_DECL, add_class)
+	collapse_list(found_class, lambda x: x.kind == CursorKind.CLASS_DECL, add_class)
 		
 	parsed_classes = {}
 	for cursor, base, type in classes:
@@ -277,14 +275,14 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 
 				match macro.spelling:
 					case 'GMETHOD':
-						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
+						if item.kind != CursorKind.CXX_METHOD:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
 							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
 						is_ignored = False
 
 					case 'GPROPERTY':
-						if item.kind != clang.cindex.CursorKind.FIELD_DECL:
+						if item.kind != CursorKind.FIELD_DECL:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be data member'
 							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
@@ -309,7 +307,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 						subgroup = get_macro_body(filecontent, macro)
 
 					case 'GBITFIELD':
-						if item.kind != clang.cindex.CursorKind.ENUM_DECL:
+						if item.kind != CursorKind.ENUM_DECL:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be enum'
 							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
@@ -326,7 +324,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 						class_defs['signals'].append((name, args))
 
 					case 'GRPC':
-						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
+						if item.kind != CursorKind.CXX_METHOD:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
 							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
@@ -384,7 +382,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 						properties['rpc_config'] = rpc_config 
 
 					case 'GVARARG':
-						if item.kind != clang.cindex.CursorKind.CXX_METHOD:
+						if item.kind != CursorKind.CXX_METHOD:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
 							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
@@ -401,7 +399,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 			nonlocal subgroup
 			properties = None
 			match item.kind:
-				case clang.cindex.CursorKind.CXX_METHOD:
+				case CursorKind.CXX_METHOD:
 					is_virtual = is_virtual_method(item)
 					properties = {}
 					if process_macros(item, macros, properties, (is_virtual and item.spelling.startswith('_')) or not auto_methods):
@@ -414,9 +412,9 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 								}
 						class_defs['methods'].append(properties)
 
-				case clang.cindex.CursorKind.ENUM_DECL:
+				case CursorKind.ENUM_DECL:
 					properties = {'enum_type' : 'enum_constants'}
-					properties['list'] = [enum.spelling for enum in item.get_children() if enum.kind == clang.cindex.CursorKind.ENUM_CONSTANT_DECL]
+					properties['list'] = [enum.spelling for enum in item.get_children() if enum.kind == CursorKind.ENUM_CONSTANT_DECL]
 
 					if process_macros(item, macros, properties):
 
@@ -425,7 +423,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 						else:
 							class_defs['constants'] += properties['list']
 
-				case clang.cindex.CursorKind.FIELD_DECL:
+				case CursorKind.FIELD_DECL:
 					properties = {}
 					if process_macros(item, macros, properties, True):
 						properties |= { 'name': item.spelling,
@@ -438,7 +436,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 
 
 						
-		leftover = collapse_list(class_macros, lambda x: x.kind != clang.cindex.CursorKind.MACRO_INSTANTIATION, apply_macros)
+		leftover = collapse_list(class_macros, lambda x: x.kind != CursorKind.MACRO_INSTANTIATION, apply_macros)
 		for macro in leftover:
 			if macro.spelling not in ['GSIGNAL', 'GGROUP', 'GSUBGROUP']:
 				raise CppScriptException('{}:{}:{}: error: macro without target member'
