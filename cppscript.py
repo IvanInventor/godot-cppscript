@@ -471,10 +471,12 @@ def write_header(file, defs, src):
 				args = ''.join(f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args'])
 				defvals = ''.join(f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != '')
 				if method['is_static']:
-					Hstatic_method += f'\tStaticMethod<&{class_name}::{method["name"]}{defvals}>::bind("{class_name}", D_METHOD("{method["bind_name"]}"{args}));\n'
+					Hstatic_method += f'\tStaticMethod<&{class_name}::{method["name"]}{defvals}>::bind(get_class_static(), D_METHOD("{method["bind_name"]}"{args}));\n'
 
-				elif method['is_virtual']:
-					Hvirtual_method += f'\tMethod<&{class_name}::{method["name"]}>::bind_virtual("{method["bind_name"]}"{defvals});\n'
+				# TODO: virtual method bindings need
+				# more work with GDExtension
+				#elif method['is_virtual']:
+				#	Hvirtual_method += f'\tMethod<&{class_name}::{method["name"]}>::bind_virtual("{method["bind_name"]}"{defvals});\n'
 
 				else:
 					Hmethod += f'\tMethod<&{class_name}::{method["name"]}>::bind(D_METHOD("{method["bind_name"]}"{args}){defvals});\n'

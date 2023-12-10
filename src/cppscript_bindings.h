@@ -178,9 +178,9 @@ template<auto Ptr>
 struct StaticMethod {
 	static constexpr bool is_supported = decltype(impl::is_function_signature_supported(Ptr))::value;
 
-	template<class Name_t, class DMETHOD_t, class ...Args>
-	static _FORCE_INLINE_ void bind(Name_t name, DMETHOD_t dmethod, Args... args) {
-		impl::BindCheck<is_supported>::bind_static(name, dmethod, Ptr, args...);	
+	template<class DMETHOD_t, class ...Args>
+	static _FORCE_INLINE_ void bind(const godot::StringName& name, DMETHOD_t dmethod, Args... args) {
+		impl::BindCheck<true>::bind_static(name, dmethod, Ptr, args...);	
 	}
 };
 
