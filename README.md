@@ -170,12 +170,12 @@ public:
 	// Virtual methods
 	virtual void virtual_example();
 
-	// Methods starting with '_' are
+	// Virtual methods starting with '_' are
 	// used internally and don't need
 	// to be registered
-	virtual void _ready() override;
-	virtual bool _has_point(const Vector2 &point) const override;
-	virtual void _input(const Ref<InputEvent> &event) override;
+	void _ready() override;
+	bool _has_point(const Vector2 &point) const override;
+	void _input(const Ref<InputEvent> &event) override;
 
 	// Register your class
 	// Possible class types:
@@ -187,51 +187,55 @@ public:
 ```
 #### Generated code
 ```cpp
+#include <cppscript_bindings.h>
+
+#include <exampleinrepo.hpp>
+
+using namespace godot;
+
 // Example : Control
 
 void Example::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("set_custom_position", "pos"), &Example::set_custom_position);
-	ClassDB::bind_method(D_METHOD("get_custom_position"), &Example::get_custom_position);
-	ClassDB::bind_method(D_METHOD("simple_func"), &Example::simple_func);
-	ClassDB::bind_method(D_METHOD("simple_const_func"), &Example::simple_const_func);
-	ClassDB::bind_method(D_METHOD("image_ref_func", "p_image"), &Example::image_ref_func);
-	ClassDB::bind_method(D_METHOD("image_const_ref_func", "p_image"), &Example::image_const_ref_func);
-	ClassDB::bind_method(D_METHOD("return_something", "base"), &Example::return_something);
-	ClassDB::bind_method(D_METHOD("return_something_const"), &Example::return_something_const);
-	ClassDB::bind_method(D_METHOD("def_args", "p_a", "p_b"), &Example::def_args, DEFVAL(100), DEFVAL(200));
-	ClassDB::bind_method(D_METHOD("def_args_string", "s"), &Example::def_args_string, DEFVAL(String("default")));
-	ClassDB::bind_method(D_METHOD("rpc_example", "p_value"), &Example::rpc_example);
-	ClassDB::bind_method(D_METHOD("rpc_example2"), &Example::rpc_example2);
-	ClassDB::bind_method(D_METHOD("register_this"), &Example::register_this);
-	ClassDB::bind_method(D_METHOD("get_float_auto"), &Example::get_float_auto);
-	ClassDB::bind_method(D_METHOD("set_float_auto", "value"), &Example::set_float_auto);
-	ClassDB::bind_method(D_METHOD("get_float_hint"), &Example::get_float_hint);
-	ClassDB::bind_method(D_METHOD("set_float_hint", "value"), &Example::set_float_hint);
+	Method<&Example::set_custom_position>::bind(D_METHOD("set_custom_position", "pos"));
+	Method<&Example::get_custom_position>::bind(D_METHOD("get_custom_position"));
+	Method<&Example::simple_func>::bind(D_METHOD("simple_func"));
+	Method<&Example::simple_const_func>::bind(D_METHOD("simple_const_func"));
+	Method<&Example::image_ref_func>::bind(D_METHOD("image_ref_func", "p_image"));
+	Method<&Example::image_const_ref_func>::bind(D_METHOD("image_const_ref_func", "p_image"));
+	Method<&Example::return_something>::bind(D_METHOD("return_something", "base"));
+	Method<&Example::return_something_const>::bind(D_METHOD("return_something_const"));
+	Method<&Example::def_args>::bind(D_METHOD("def_args", "p_a", "p_b"), DEFVAL(100), DEFVAL(200));
+	Method<&Example::def_args_string>::bind(D_METHOD("def_args_string", "s"), DEFVAL(String("default")));
+	Method<&Example::rpc_example>::bind(D_METHOD("rpc_example", "p_value"));
+	Method<&Example::rpc_example2>::bind(D_METHOD("rpc_example2"));
+	Method<&Example::register_this>::bind(D_METHOD("register_this"));
+	Method<&Example::virtual_example>::bind(D_METHOD("virtual_example"));
+	Method<&Example::get_float_auto>::bind(D_METHOD("get_float_auto"));
+	Method<&Example::set_float_auto>::bind(D_METHOD("set_float_auto", "value"));
+	Method<&Example::get_float_hint>::bind(D_METHOD("get_float_hint"));
+	Method<&Example::set_float_hint>::bind(D_METHOD("set_float_hint", "value"));
 
 
-	ClassDB::bind_static_method("Example", D_METHOD("test_static", "p_a", "p_b"), &Example::test_static);
+	StaticMethod<&Example::test_static>::bind(get_class_static(), D_METHOD("test_static", "p_a", "p_b"));
 
 
-	BIND_VIRTUAL_METHOD(Example, virtual_example);
-
-
-	{
-	MethodInfo mi;
-	mi.name = "varargs_func_example";
-	mi.arguments.push_back(PropertyInfo(GetTypeInfo<String>::VARIANT_TYPE, "named_arg"));
-	mi.arguments.push_back(PropertyInfo(GetTypeInfo<Variant>::VARIANT_TYPE, "unnamed_arg"));
-	ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "varargs_func_example", &Example::varargs_func_example, mi);
-	}
+	Method<&Example::varargs_func_example>::bind_vararg("varargs_func_example"
+		,MakePropertyInfo<String>("named_arg")
+		,MakePropertyInfo<Variant>("unnamed_arg")
+		);
 
 
 	ADD_GROUP("Group", "group_");
 	ADD_SUBGROUP("Subgroup", "group_subgroup_");
-		ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype(custom_position)>::VARIANT_TYPE, "group_subgroup_custom_position", PROPERTY_HINT_NONE, ""), "set_custom_position", "get_custom_position");
-		ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype(float_auto)>::VARIANT_TYPE, "group_subgroup_float_auto", PROPERTY_HINT_NONE, ""), "set_float_auto", "get_float_auto");
-		ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype(float_hint)>::VARIANT_TYPE, "group_subgroup_float_hint", PROPERTY_HINT_RANGE, "0,1000,5"), "set_float_hint", "get_float_hint");
+		ADD_PROPERTY(MakePropertyInfo<decltype(custom_position)>("group_subgroup_custom_position"), "set_custom_position", "get_custom_position");
+		ADD_PROPERTY(MakePropertyInfo<decltype(float_auto)>("group_subgroup_float_auto"), "set_float_auto", "get_float_auto");
+		ADD_PROPERTY(MakePropertyInfo<decltype(float_hint)>("group_subgroup_float_hint", PROPERTY_HINT_RANGE, "0,1000,5"), "set_float_hint", "get_float_hint");
 
 
-	ADD_SIGNAL(MethodInfo("example_signal", PropertyInfo(GetTypeInfo<float>::VARIANT_TYPE, "typed_arg"), PropertyInfo(GetTypeInfo<Variant>::VARIANT_TYPE, "untyped_arg")));
+	ADD_SIGNAL(MethodInfo("example_signal"
+		,MakePropertyInfo<float>("typed_arg")
+		,MakePropertyInfo<Variant>("untyped_arg")
+		));
 
 
 	BIND_ENUM_CONSTANT(FIRST);
