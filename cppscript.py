@@ -213,6 +213,9 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 
 	def parse_cursor(parent):
 		for cursor in parent.get_children():
+			if cursor.location.file is None or cursor.location.file.name != filename:
+				continue
+
 			match cursor.kind:
 				case CursorKind.CLASS_DECL:
 					classes_and_Gmacros.append(cursor)
@@ -554,6 +557,7 @@ def write_header(file, defs, src):
 			([outside_bind] if outside_bind != '' else [])
 
 	file_name = filename_to_gen_filename(file, src)
+	content = ''
 	if len(defs) != 0:
 		header_include = '#include <cppscript_bindings.h>\n\n#include <{}>\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, src).replace('\\', '/'))
 		content = header_include + '\n'.join(header_defs)
