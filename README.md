@@ -22,6 +22,14 @@ pip install libclang
 ```
 ## Installation
 
+### Recommended project layout
+```
+/                 project directory
+├── project		  godot project root (res://)
+├── bin           compiled binaries
+├── cppscript     submodule 
+└── src           C++ source files
+ ```
 ### As project submodule
 
 - From root of your project (git initialized)
@@ -47,6 +55,7 @@ git submodule update --recursive --init cppscript
     mv extension_api.json gdextension/extension_api.json
     ```
 
+- Copy [scripts.gdextension](/scripts.gdextension) file to godot project (rename library name in file and filename if needed)
 ## Build project
 From cppscript/
 ```bash
@@ -57,13 +66,7 @@ or
 scons build_library=false
 ```
 after building library for your target once (saves couple of seconds)
-## Recommended project layout
-```
-/                 project directory (res://)
-├── bin           compiled binaries
-├── cppscript     submodule 
-└── src           C++ source files
- ```
+
 ## All working features
 #### Example class in header (read comments)
 ```cpp
