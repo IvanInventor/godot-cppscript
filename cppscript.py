@@ -21,8 +21,8 @@ INIT_LEVELS = ['GINIT_LEVEL_CORE', 'GINIT_LEVEL_SERVERS', 'GINIT_LEVEL_SCENE', '
 class CppScriptException(Exception):
 	pass
 
-def filename_to_gen_filename(name, src):
-	return os.path.join(src, '.gen', os.path.relpath(name.replace('.hpp', '.gen.cpp'), src))
+def filename_to_gen_filename(name, env):
+	return os.path.join(env['gen_dir'], os.path.relpath(name.replace('.hpp', '.gen.cpp'), env['src']))
 
 
 def collapse_list(list, key, action):
@@ -132,7 +132,7 @@ def is_virtual_method(cursor):
 
 # Builder
 def generate_header_emitter(target, source, env):
-	return [env.File(env['gen_header'])] + [env.File(filename_to_gen_filename(str(i), env['src'])) for i in source], source
+	return [env.File(env['gen_header'])] + [env.File(filename_to_gen_filename(str(i), env)) for i in source], source
 
 
 def generate_header(target, source, env):
@@ -154,8 +154,8 @@ def generate_header(target, source, env):
 		except AttributeError:
 			new_defs = {str(s) : parse_and_write_header(index, *get_file_scons(s), env) for s in source}
 
-		write_register_header(new_defs, env['src'], str(target[0]))
-		write_property_header(new_defs, os.path.join(env['src'], 'properties.gen.h'))
+		write_register_header(new_defs, env)
+		write_property_header(new_defs, env)
 
 		with open(env['defs_file'], 'w') as file:
 			json.dump(new_defs, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
@@ -176,8 +176,8 @@ def generate_header_cmake(target, source, env):
 		cached_defs = load_defs_json(env['defs_file'])
 		new_defs = {str(s) : parse_and_write_header(index, *get_file_cmake(s), env) for s in source}
 		
-		write_register_header(new_defs, env['src'], str(target[0]))
-		write_property_header(new_defs, os.path.join(env['src'], 'properties.gen.h'))
+		write_register_header(new_defs, env)
+		write_property_header(new_defs, env)
 
 		with open(env['defs_file'], 'w') as file:
 			json.dump(new_defs, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
@@ -454,11 +454,12 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 
 def parse_and_write_header(index, filename, filecontent, env):
 	defs = parse_header(index, filename, filecontent, env['src'], env['auto_methods'])
-	write_header(filename, defs, env['src'])
+	write_header(filename, defs, env)
 	return defs
 
 
-def write_header(file, defs, src):
+def write_header(file, defs, env):
+	src = env['src']
 	header_defs = []
 	for class_name_full, content in defs.items():
 		class_name = content['class_name']
@@ -556,7 +557,8 @@ def write_header(file, defs, src):
 			([property_set_get_defs] if property_set_get_defs != '' else []) + \
 			([outside_bind] if outside_bind != '' else [])
 
-	file_name = filename_to_gen_filename(file, src)
+	file_name = filename_to_gen_filename(file, env)
+	print(file_name)
 	content = ''
 	if len(defs) != 0:
 		header_include = '#include <cppscript_bindings.h>\n\n#include <{}>\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, src).replace('\\', '/'))
@@ -567,7 +569,9 @@ def write_header(file, defs, src):
 		fileopen.write(content)
 
 
-def write_register_header(defs, src, target):
+def write_register_header(defs, env):
+	src = env['src']
+	target = env['gen_header']
 	scripts_header = ''
 	classes_register_levels = {name[12:] : [] for name in INIT_LEVELS}
 
@@ -604,7 +608,8 @@ def write_register_header(defs, src, target):
 		file.write(scripts_header)
 
 
-def write_property_header(new_defs, filepath):
+def write_property_header(new_defs, env):
+	filepath = os.path.join(env['src'], 'properties.gen.h')
 	body = ''
 	for _, file in new_defs.items():
 		for class_name_full, content in file.items():

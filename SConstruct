@@ -12,6 +12,7 @@ scripts = GlobRecursive(SRC_DIR, '*.hpp')
 env.Append(CPPPATH=[SRC_DIR, 'src'])
 								# CppScript config
 env['src'] = SRC_DIR						# Path to C++ source files
+env['gen_dir'] = "../.gen"					# Path for generated object files
 env['defs_file'] = os.path.join(SRC_DIR, 'defs.json')		# Path to generated bindings
 env['gen_header'] = os.path.join(SRC_DIR, 'scripts.gen.h')	# Path to generated header
 env['auto_methods'] = True					# Generate bindings to public methods automatically
