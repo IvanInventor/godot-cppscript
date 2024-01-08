@@ -29,22 +29,25 @@ static constexpr bool assert_is_supported_type_v = assert_is_supported_type<T>::
 
 
 template<class T>
-static constexpr bool assert_is_ret_supported = assert_is_supported_type_v<T>;
-
+struct assert_is_ret_supported {
+	static constexpr bool value = assert_is_supported_type_v<T>;
+};
 template<>
-static constexpr bool assert_is_ret_supported<void> = true;
+struct assert_is_ret_supported<void> {
+	static constexpr bool value = true;
+};
 
 template <typename>
 struct MemberSignature;
 
 template <typename Class, typename Ret, typename... Args>
 struct MemberSignature<Ret (Class::*)(Args...) const> {
-	static constexpr bool value = assert_is_ret_supported<Ret> && (assert_is_supported_type_v<Args> && ...);
+	static constexpr bool value = assert_is_ret_supported<Ret>::value && (assert_is_supported_type_v<Args> && ...);
 };
 
 template <typename Class, typename Ret, typename... Args>
 struct MemberSignature<Ret (Class::*)(Args...)> {
-	static constexpr bool value = assert_is_ret_supported<Ret> && (assert_is_supported_type_v<Args> && ...);
+	static constexpr bool value = assert_is_ret_supported<Ret>::value && (assert_is_supported_type_v<Args> && ...);
 };
 
 template <typename Ret, typename... Args>
@@ -52,22 +55,22 @@ struct FunctionSignature;
 
 template <typename Ret, typename... Args>
 struct FunctionSignature<Ret (*)(Args...)> {
-	static constexpr bool value = assert_is_ret_supported<Ret> && (assert_is_supported_type_v<Args> && ...);
+	static constexpr bool value = assert_is_ret_supported<Ret>::value && (assert_is_supported_type_v<Args> && ...);
 };
 
 
 template <typename Class, typename Ret, typename... Args>
-constexpr auto is_method_signature_supported(Ret (Class::*func)(Args...) const) {
+static constexpr auto is_method_signature_supported(Ret (Class::*func)(Args...) const) {
     return MemberSignature<decltype(func)>();
 }
 
 template <typename Class, typename Ret, typename... Args>
-constexpr auto is_method_signature_supported(Ret (Class::*func)(Args...)) {
+static constexpr auto is_method_signature_supported(Ret (Class::*func)(Args...)) {
     return MemberSignature<decltype(func)>();
 }
 
 template <typename Ret, typename... Args>
-constexpr auto is_function_signature_supported(Ret (*func)(Args...)) {
+static constexpr auto is_function_signature_supported(Ret (*func)(Args...)) {
 	return FunctionSignature<decltype(func)>();
 }
 
