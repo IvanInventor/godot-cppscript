@@ -1,5 +1,5 @@
 from clang.cindex import Index, TranslationUnit, CursorKind, TokenKind, AccessSpecifier
-import os, sys, json
+import os, sys, json, hashlib, shutil
 
 if 'NOT_SCONS' not in os.environ.keys():
 	from SCons.Script import Glob
@@ -135,57 +135,58 @@ def generate_header_emitter(target, source, env):
 	return [env.File(env['gen_header'])] + [env.File(filename_to_gen_filename(str(i), env)) for i in source], source
 
 
-def generate_header(target, source, env):
-	index = Index.create()
-	try:
-		os.remove(os.path.join(env['src'], 'properties.gen.h'))
-	except:
-		pass
-
-	try:
-		try:
-			sourcesigs, sources = target[0].get_stored_info().binfo.bsourcesigs, target[0].get_stored_info().binfo.bsources
-			cached_defs = load_defs_json(env['defs_file'])
-
-			new_defs = {str(s) : (cached_defs[str(s)]
-						if str(s) in sources and s.get_csig() == sourcesigs[sources.index(str(s))].csig and str(s) in cached_defs.keys()
-						else parse_and_write_header(index, *get_file_scons(s), env)) for s in source}
-
-		except AttributeError:
-			new_defs = {str(s) : parse_and_write_header(index, *get_file_scons(s), env) for s in source}
-
-		write_register_header(new_defs, env)
-		write_property_header(new_defs, env)
-
-		with open(env['defs_file'], 'w') as file:
-			json.dump(new_defs, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
-		
-	except CppScriptException as e:
-		print(f'\n{e}\n', file=sys.stderr)
-		return 1
+def generate_header_scons(target, source, env):
+	return generate_header(target, source, env, get_file_scons)
 
 
 def generate_header_cmake(target, source, env):
+	return generate_header(target, source, env, get_file_cmake)
+
+
+def generate_header(target, source, env, get_file):
 	index = Index.create()
+	prop_file_name = os.path.join(env['src'], 'properties.gen.h')
 	try:
-		os.remove(os.path.join(env['src'], 'properties.gen.h'))
+		shutil.move(prop_file_name, prop_file_name + '.tmp')
 	except:
 		pass
-	
+
 	try:
-		cached_defs = load_defs_json(env['defs_file'])
-		new_defs = {str(s) : parse_and_write_header(index, *get_file_cmake(s), env) for s in source}
-		
-		write_register_header(new_defs, env)
-		write_property_header(new_defs, env)
+		cached_defs_all = load_defs_json(env['defs_file'])
+		cached_defs = cached_defs_all.get('files', {})
+		need_regen = False
+
+		new_defs_files = {}
+		for s in source:
+			filename, file_content = get_file(s)
+			new_hash = hashlib.md5(file_content.encode()).hexdigest()
+			if filename not in cached_defs.keys() or new_hash != cached_defs[filename]['hash']:
+				need_regen = True
+				new_defs_files |= {filename : {'content' : parse_and_write_header(index, filename, file_content, env), 'hash' : new_hash}}
+			else:
+				new_defs_files |= {filename : cached_defs[filename]}
+
+		new_defs_all = {'hash' : cached_defs_all.get('hash', None), 'files' : new_defs_files}
+
+		if write_register_header(new_defs_all, env) or need_regen:
+			write_property_header(new_defs_all, env)
+			try:
+				os.remove(prop_file_name + '.tmp')
+			except:
+				pass
+		else:
+			try:
+				shutil.move(prop_file_name + '.tmp', prop_file_name)
+			except:
+				pass
 
 		with open(env['defs_file'], 'w') as file:
-			json.dump(new_defs, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
-		
+			json.dump(new_defs_all, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
+
 	except CppScriptException as e:
 		print(f'\n{e}\n', file=sys.stderr)
 		return 1
-	
+
 	return 0
 
 def parse_header(index, filename, filecontent, src, auto_methods):
@@ -202,7 +203,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 				case CursorKind.CXX_METHOD:
 					if cursor.access_specifier == AccessSpecifier.PUBLIC:
 						class_cursors.append(cursor)
-					
+
 				case CursorKind.FIELD_DECL:
 					class_cursors.append(cursor)
 
@@ -234,7 +235,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 					parse_cursor(cursor)
 
 	parse_cursor(translation_unit.cursor)
-	found_class = sorted(classes_and_Gmacros, key=lambda x: x.extent.start.offset, reverse=True)	
+	found_class = sorted(classes_and_Gmacros, key=lambda x: x.extent.start.offset, reverse=True)
 	classes = []
 	def add_class(cursor, macros):
 		if len(macros) > 1:
@@ -242,13 +243,13 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 			raise CppScriptException('{}:{}:{}: error: repeated class macro for "{}" class defined at {}:{}'
 			.format(filename, wrong_macro.location.line, wrong_macro.location.column, cursor.spelling, cursor.location.line, cursor.location.column))
 
-		
+
 		for macro in macros:
 			classes.append((cursor, get_macro_args(filecontent, macro)[1], macro.spelling[1:]))
 
 
 	collapse_list(found_class, lambda x: x.kind == CursorKind.CLASS_DECL, add_class)
-		
+
 	parsed_classes = {}
 	for cursor, base, type in classes:
 		class_defs = {
@@ -293,7 +294,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 						if len(args) < 2:
 							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage: must be at least 2 arguments: setter and getter'
 							.format(filename, macro.location.line, macro.location.column, macro.spelling))
-					
+
 						properties |= {
 								'setter' : args[0],
 								'getter' : args[1],
@@ -317,7 +318,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 						if item.type.spelling[-1] == ')':
 								raise CppScriptException('{}:{}:{}: error: enum at {}:{} must be named'
 								.format(filename, macro.location.line, macro.location.column, item.location.line, item.location.column))
-						
+
 						properties['enum_type'] = 'bitfields'
 
 					case 'GSIGNAL':
@@ -381,7 +382,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 								'transfer_mode' : 'TRANSFER_MODE_' + transfer_mode if transfer_mode != None else 'TRANSFER_MODE_UNRELIABLE',
 		    						'call_local' : call_local if call_local != None else 'false',
 		    						'channel' : channel if channel != None else '0'}
-						
+
 						properties['rpc_config'] = rpc_config 
 
 					case 'GVARARG':
@@ -390,7 +391,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
 
 						properties['varargs'] = get_pair_arglist(get_macro_args(filecontent, macro), 'Variant')
-					
+
 					case 'GIGNORE':
 						is_ignored = True
 
@@ -438,7 +439,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 						class_defs['properties'].append(properties)
 
 
-						
+
 		leftover = collapse_list(class_macros, lambda x: x.kind != CursorKind.MACRO_INSTANTIATION, apply_macros)
 		for macro in leftover:
 			if macro.spelling not in ['GSIGNAL', 'GGROUP', 'GSUBGROUP']:
@@ -455,6 +456,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 def parse_and_write_header(index, filename, filecontent, env):
 	defs = parse_header(index, filename, filecontent, env['src'], env['auto_methods'])
 	write_header(filename, defs, env)
+
 	return defs
 
 
@@ -558,7 +560,6 @@ def write_header(file, defs, env):
 			([outside_bind] if outside_bind != '' else [])
 
 	file_name = filename_to_gen_filename(file, env)
-	print(file_name)
 	content = ''
 	if len(defs) != 0:
 		header_include = '#include <cppscript_bindings.h>\n\n#include <{}>\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, src).replace('\\', '/'))
@@ -569,13 +570,14 @@ def write_header(file, defs, env):
 		fileopen.write(content)
 
 
-def write_register_header(defs, env):
+def write_register_header(defs_all, env):
 	src = env['src']
 	target = env['gen_header']
 	scripts_header = ''
 	classes_register_levels = {name[12:] : [] for name in INIT_LEVELS}
 
-	for file, classes in defs.items():
+	for file, filecontent in defs_all['files'].items():
+		classes = filecontent['content']
 		if len(classes) == 0:
 			continue
 
@@ -604,18 +606,27 @@ def write_register_header(defs, env):
 
 	scripts_header += classes_register_str
 
-	with open(target, 'w') as file:
-		file.write(scripts_header)
+	new_hash = hashlib.md5(scripts_header.encode()).hexdigest()
+
+	if new_hash != defs_all['hash']:
+		with open(target, 'w') as file:
+			file.write(scripts_header)
+		defs_all['hash'] = new_hash
+
+		return True
+
+	return False
 
 
 def write_property_header(new_defs, env):
 	filepath = os.path.join(env['src'], 'properties.gen.h')
 	body = ''
-	for _, file in new_defs.items():
-		for class_name_full, content in file.items():
+	for filename, filecontent in new_defs['files'].items():
+		classcontent = filecontent['content']
+		for class_name_full, content in classcontent.items():
 			gen_setgets = [f' \\\nGENERATE_GETTER_DECLARATION({g}, {n})' for g, n in content['gen_getters']] + [f' \\\nGENERATE_SETTER_DECLARATION({g}, {n})' for g, n in content['gen_setters']]
 			body += f'#define GSETGET_{content["class_name"]}' + ''.join(gen_setgets) + '\n\n'
-	
+
 	with open(filepath, 'w') as file:
 		file.write(body)
 

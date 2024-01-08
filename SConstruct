@@ -1,4 +1,4 @@
-from cppscript import GlobRecursive, generate_header, generate_header_emitter
+from cppscript import GlobRecursive, generate_header_scons, generate_header_emitter
 import os
 
 SRC_DIR = '../src'
@@ -18,7 +18,7 @@ env['gen_header'] = os.path.join(SRC_DIR, 'scripts.gen.h')	# Path to generated h
 env['auto_methods'] = True					# Generate bindings to public methods automatically
 								# Or require GMETHOD() before methods
 env.Append(BUILDERS={'CppScript' : Builder(
-    action=generate_header,
+    action=generate_header_scons,
     emitter=generate_header_emitter)})
 
 generated = env.CppScript(scripts)
