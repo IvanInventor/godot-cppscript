@@ -1,6 +1,5 @@
-#ifndef CPPSCRIPT_H
-#define CPPSCRIPT_H
-#include "properties.gen.h"
+#ifndef CPPSCRIPT_HEADER
+#define CPPSCRIPT_HEADER
 #include <godot_cpp/classes/multiplayer_api.hpp>
 #include <godot_cpp/classes/multiplayer_peer.hpp>
 
@@ -49,4 +48,4 @@ void function(decltype(property) value) {	\
 #define GINIT_LEVEL_SCENE(...)
 #define GINIT_LEVEL_EDITOR(...)
 
-#endif // CPPSCRIPT_H
+#endif // CPPSCRIPT_HEADER

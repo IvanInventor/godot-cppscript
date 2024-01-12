@@ -10,3 +10,5 @@
 # Scons specific
 *.sconsign.dblite
 
+# Python
+*__pycache__

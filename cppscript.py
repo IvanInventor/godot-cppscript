@@ -17,6 +17,23 @@ if 'NOT_SCONS' not in os.environ.keys():
 KEYWORDS = ['GPROPERTY', 'GMETHOD', 'GGROUP', 'GSUBGROUP', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE']
 INIT_LEVELS = ['GINIT_LEVEL_CORE', 'GINIT_LEVEL_SERVERS', 'GINIT_LEVEL_SCENE', 'GINIT_LEVEL_EDITOR']
 
+CPPSCRIPT_BODY="""#ifndef {0}
+#define {0}
+#include <cppscript_defs.h>
+#include "properties.gen.h"
+#endif // {0}
+"""
+
+RPC_CONFIG_BODY = """	{{
+	Dictionary opts;
+	opts["rpc_mode"] = MultiplayerAPI::{0};
+	opts["transfer_mode"] = MultiplayerPeer::{1};
+	opts["call_local"] = {2};
+	opts["channel"] = {3};
+	rpc_config("{4}", opts);
+	}}
+"""
+
 # Helpers
 class CppScriptException(Exception):
 	pass
@@ -145,14 +162,15 @@ def generate_header_cmake(target, source, env):
 
 def generate_header(target, source, env, get_file):
 	index = Index.create()
-	prop_file_name = os.path.join(env['src'], 'properties.gen.h')
+	prop_file_name = os.path.join(env['src'], 'properties.gen.h') 
 	try:
 		shutil.move(prop_file_name, prop_file_name + '.tmp')
 	except:
 		pass
 
 	try:
-		cached_defs_all = load_defs_json(env['defs_file'])
+		defs_file_path = os.path.join(env['gen_dir'], 'defs.json')
+		cached_defs_all = load_defs_json(defs_file_path)
 		cached_defs = cached_defs_all.get('files', {})
 		need_regen = False
 
@@ -168,6 +186,12 @@ def generate_header(target, source, env, get_file):
 
 		new_defs_all = {'hash' : cached_defs_all.get('hash', None), 'files' : new_defs_files}
 
+		# Create include header if not exists
+		path = os.path.join(env['src'], env['header_name'])
+		if not os.path.exists(path):
+			with open(path, 'w') as file:
+				file.write(CPPSCRIPT_BODY.format(env['header_name'].replace(' ', '_').replace('.', '_').upper()))
+
 		if write_register_header(new_defs_all, env) or need_regen:
 			write_property_header(new_defs_all, env)
 			try:
@@ -180,7 +204,7 @@ def generate_header(target, source, env, get_file):
 			except:
 				pass
 
-		with open(env['defs_file'], 'w') as file:
+		with open(defs_file_path, 'w') as file:
 			json.dump(new_defs_all, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
 
 	except CppScriptException as e:
@@ -245,17 +269,17 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 
 
 		for macro in macros:
-			classes.append((cursor, get_macro_args(filecontent, macro)[1], macro.spelling[1:]))
+			classes.append((cursor, get_macro_args(filecontent, macro)[1], macro))
 
 
 	collapse_list(found_class, lambda x: x.kind == CursorKind.CLASS_DECL, add_class)
 
 	parsed_classes = {}
-	for cursor, base, type in classes:
+	for cursor, base, gdclass_macro in classes:
 		class_defs = {
 			'class_name' : cursor.spelling,
 			'base' : base,
-			'type' : type,
+			'type' : gdclass_macro.spelling[1:],
 			'init_level' : 'SCENE',
 			'methods' : [],
 			'properties' : [],
@@ -266,6 +290,9 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 			}
 		child_cursors = []
 		parse_class(cursor, child_cursors)
+		# Exclude cursors added by GCLASS() macro
+		child_cursors = [i for i in child_cursors if gdclass_macro.extent.start.offset != i.extent.start.offset]
+
 		group, subgroup = '', ''
 		start, end = cursor.extent.start.offset, cursor.extent.end.offset
 		class_macros = sorted([m for m in keyword_macros if start < m.extent.start.offset < end] + child_cursors, key=lambda x: x.extent.start.offset)
@@ -488,15 +515,13 @@ def write_header(file, defs, env):
 					Hmethod += f'\tMethod<&{class_name}::{method["name"]}>::bind(D_METHOD("{method["bind_name"]}"{args}){defvals});\n'
 
 				if 'rpc_config' in method.keys():
-					header_rpc_config += f"""	{{
-	Dictionary opts;
-	opts["rpc_mode"] = MultiplayerAPI::{method['rpc_config']['rpc_mode']};
-	opts["transfer_mode"] = MultiplayerPeer::{method['rpc_config']['transfer_mode']};
-	opts["call_local"] = {method['rpc_config']['call_local']};
-	opts["channel"] = {method['rpc_config']['channel']};
-	rpc_config("{method["name"]}", opts);
-	}}
-"""
+					header_rpc_config += RPC_CONFIG_BODY.format(
+						method['rpc_config']['rpc_mode'],
+						method['rpc_config']['transfer_mode'],
+						method['rpc_config']['call_local'],
+						method['rpc_config']['channel'],
+						method["name"]
+						)
 			else:
 				args_list = '\n'.join(f'\t\t,MakePropertyInfo<{type}>("{name}")' for type, name in method['varargs'])
 
