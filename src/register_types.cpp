@@ -6,7 +6,6 @@
 #include <godot_cpp/classes/multiplayer_peer.hpp>
 #include <godot_cpp/classes/multiplayer_api.hpp>
 
-#include "scripts.gen.h"
 #include "register_types.h"
 
 //include custom headers here

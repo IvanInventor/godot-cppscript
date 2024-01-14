@@ -1,7 +1,12 @@
 find_package(Python3 3.4 REQUIRED)
 
+set(CPPSCRIPT_DIR ${CMAKE_CURRENT_LIST_DIR}/..)
+
 #TODO: make it work in parallel
-function(create_cppscript_target HEADER_NAME GODOT_CPPSCRIPT_DIR HEADERS_DIR GEN_DIR GEN_HEADER AUTO_METHODS CPPSCRIPT_SOURCES)
+function(create_cppscript_target HEADER_NAME HEADERS_DIR GEN_DIR AUTO_METHODS INCLUDE_PATHS COMPILE_DEFS CPPSCRIPT_SOURCES)
+	if("${COMPILE_DEFS}" STREQUAL "DEFS-NOTFOUND")
+		set(COMPILE_DEFS "")
+	endif()
 	if(${AUTO_METHODS})
 		set(AUTO_METHODS_STR "True")
 	else()
@@ -16,25 +21,28 @@ function(create_cppscript_target HEADER_NAME GODOT_CPPSCRIPT_DIR HEADERS_DIR GEN
 	endforeach()
 	set(${CPPSCRIPT_SOURCES} ${SOURCES_LIST} PARENT_SCOPE)
 
-	add_custom_command(OUTPUT ${GEN_HEADER} ${SOURCES_LIST}
-		COMMAND ${Python3_EXECUTABLE} "${GODOT_CPPSCRIPT_DIR}/cppscript_bindings.py"
-		"--header-name" "${HEADER_NAME}"
-		"--src" "${HEADERS_DIR}"
-		"--gen-dir" "${GEN_DIR}"
-		"--gen-header" "${GEN_HEADER}"
-		"--auto-methods" "${AUTO_METHODS_STR}"
-		${CPPSCRIPT_HEADERS}
+	add_custom_command(
+		OUTPUT
+			${HEADERS_DIR}/${HEADER_NAME}
+			${HEADERS_DIR}/scripts.gen.h
+			${HEADERS_DIR}/properties.gen.h
+			${SOURCES_LIST}
+
+		COMMAND
+			${Python3_EXECUTABLE} "${CPPSCRIPT_DIR}/cppscript_bindings.py"
+			"--header-name" "${HEADER_NAME}"
+			"--header-dir" "${HEADERS_DIR}"
+			"--gen-dir" "${GEN_DIR}"
+			"--auto-methods" "${AUTO_METHODS_STR}"
+			"--definitions" ${COMPILE_DEFS}
+			"--include-paths" ${CPPSCRIPT_DIR}/src ${HEADERS_DIR} ${INCLUDE_PATHS}
+			"--"
+			${CPPSCRIPT_HEADERS}
 
 		DEPENDS ${CPPSCRIPT_HEADERS}
-		WORKING_DIRECTORY ${GODOT_CPPSCRIPT_DIR}
+		WORKING_DIRECTORY ${CPPSCRIPT_DIR}
 		VERBATIM
 		COMMENT "Parsing header files..."
 	)
-	
-	#add_custom_target(${TARGET_NAME} DEPENDS ${GEN_HEADER} ${SOURCES_LIST})
-	#foreach(file ${SOURCES_LIST})
-	#	file(WRITE ${file} "")
-#	endforeach()
-	file(REMOVE ${GEN_DIR}/defs.json)
 endfunction()
 

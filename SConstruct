@@ -6,18 +6,18 @@ library_name = 'scripts'
 
 env = SConscript('godot-cpp/SConstruct').Clone()
 
-sources = GlobRecursive(SRC_DIR, '*.cpp') + [env.File('src/register_types.cpp')]
+sources = GlobRecursive(SRC_DIR, '*.cpp')
 scripts = GlobRecursive(SRC_DIR, '*.hpp')
 
 env.Append(CPPPATH=[SRC_DIR, 'src'])
 								# CppScript config
 env['header_name'] = 'cppscript.h'				# Name of header to be included to enable cppscript
 								# (Prefer name unique to your project)
-env['src'] = SRC_DIR						# Path to C++ source files
+env['header_dir'] = SRC_DIR					# Path to C++ header files
 env['gen_dir'] = "../.gen"					# Path for generated object files
-env['gen_header'] = os.path.join(SRC_DIR, 'scripts.gen.h')	# Path to generated header
 env['auto_methods'] = True					# Generate bindings to public methods automatically
 								# Or require GMETHOD() before methods
+env.Append(CXXFLAGS='-fdiagnostics-color=always')
 env.Append(BUILDERS={'CppScript' : Builder(
     action=generate_header_scons,
     emitter=generate_header_emitter)})

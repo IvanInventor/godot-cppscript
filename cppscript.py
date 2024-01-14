@@ -17,7 +17,9 @@ if 'NOT_SCONS' not in os.environ.keys():
 KEYWORDS = ['GPROPERTY', 'GMETHOD', 'GGROUP', 'GSUBGROUP', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE']
 INIT_LEVELS = ['GINIT_LEVEL_CORE', 'GINIT_LEVEL_SERVERS', 'GINIT_LEVEL_SCENE', 'GINIT_LEVEL_EDITOR']
 
-CPPSCRIPT_BODY="""#ifndef {0}
+DONOTEDIT_MSG = "/*-- GENERATED FILE - DO NOT EDIT --*/\n\n"
+
+CPPSCRIPT_BODY= DONOTEDIT_MSG + """#ifndef {0}
 #define {0}
 #include <cppscript_defs.h>
 #include "properties.gen.h"
@@ -39,7 +41,7 @@ class CppScriptException(Exception):
 	pass
 
 def filename_to_gen_filename(name, env):
-	return os.path.join(env['gen_dir'], os.path.relpath(name.replace('.hpp', '.gen.cpp'), env['src']))
+	return os.path.join(env['gen_dir'], os.path.relpath(name.replace('.hpp', '.gen.cpp'), env['header_dir']))
 
 
 def collapse_list(list, key, action):
@@ -149,30 +151,57 @@ def is_virtual_method(cursor):
 
 # Builder
 def generate_header_emitter(target, source, env):
-	return [env.File(env['gen_header'])] + [env.File(filename_to_gen_filename(str(i), env)) for i in source], source
+	return [env.File(os.path.join(env['header_dir'], 'scripts.gen.h'))] + [env.File(filename_to_gen_filename(str(i), env)) for i in source], source
 
 
 def generate_header_scons(target, source, env):
-	return generate_header(target, source, env, get_file_scons)
+	# Convert scons variables to cppscript's env
+	cppscript_env = {
+			'header_name' : env['header_name'],
+			'header_dir' : env['header_dir'],
+			'gen_dir' : env['gen_dir'],
+			'compile_defs' : [f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env['CPPDEFINES']],
+			'include_paths' : env['CPPPATH'],
+			'auto_methods' : env['auto_methods']
+		}
 
 
-def generate_header_cmake(target, source, env):
-	return generate_header(target, source, env, get_file_cmake)
+	return generate_header(target, source, cppscript_env, get_file_scons)
+
+
+def generate_header_cmake(source, env):
+	return generate_header(None, source, env, get_file_cmake)
 
 
 def generate_header(target, source, env, get_file):
 	index = Index.create()
-	prop_file_name = os.path.join(env['src'], 'properties.gen.h') 
+	prop_file_name = os.path.join(env['header_dir'], 'properties.gen.h') 
+
+	# Move properties file if exists to avoid infinite cycle for auto-genereted getter/setters:
+	# no method definition -> generate one -> parse  | 
+	#     ^                                          V
+	#     |   do NOT generate one   <-     method exists
 	try:
 		shutil.move(prop_file_name, prop_file_name + '.tmp')
 	except:
 		pass
+
+	# Create include header if not exists
+	path = os.path.join(env['header_dir'], env['header_name'])
+	if not os.path.exists(path):
+		with open(path, 'w') as file:
+			file.write(CPPSCRIPT_BODY.format(env['header_name'].replace(' ', '_').replace('.', '_').upper()))
 
 	try:
 		defs_file_path = os.path.join(env['gen_dir'], 'defs.json')
 		cached_defs_all = load_defs_json(defs_file_path)
 		cached_defs = cached_defs_all.get('files', {})
 		need_regen = False
+
+		# Prepare parser args
+		env['parser_args'] = [f'-I{i}' for i in env['include_paths']] + \
+			[f'-D{i}' for i in env['compile_defs']] + \
+			[f'-DGDCLASS']
 
 		new_defs_files = {}
 		for s in source:
@@ -185,12 +214,6 @@ def generate_header(target, source, env, get_file):
 				new_defs_files |= {filename : cached_defs[filename]}
 
 		new_defs_all = {'hash' : cached_defs_all.get('hash', None), 'files' : new_defs_files}
-
-		# Create include header if not exists
-		path = os.path.join(env['src'], env['header_name'])
-		if not os.path.exists(path):
-			with open(path, 'w') as file:
-				file.write(CPPSCRIPT_BODY.format(env['header_name'].replace(' ', '_').replace('.', '_').upper()))
 
 		if write_register_header(new_defs_all, env) or need_regen:
 			write_property_header(new_defs_all, env)
@@ -213,8 +236,8 @@ def generate_header(target, source, env, get_file):
 
 	return 0
 
-def parse_header(index, filename, filecontent, src, auto_methods):
-	translation_unit = index.parse(filename, args=[f'-I{src}', '-Isrc', '-DGDCLASS'], unsaved_files=[(filename, filecontent)], options=TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+def parse_header(index, filename, filecontent, env):
+	translation_unit = index.parse(filename, args=env['parser_args'], unsaved_files=[(filename, filecontent)], options=TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
 		raise CppScriptException("{filename}: failed to create translation unit")
@@ -433,7 +456,7 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 				case CursorKind.CXX_METHOD:
 					is_virtual = is_virtual_method(item)
 					properties = {}
-					if process_macros(item, macros, properties, (is_virtual and item.spelling.startswith('_')) or not auto_methods):
+					if process_macros(item, macros, properties, (is_virtual and item.spelling.startswith('_')) or not env['auto_methods']):
 						properties |= {	'name' : item.spelling,
 								'bind_name' : item.spelling,
 								'return' : item.result_type.spelling,
@@ -481,14 +504,13 @@ def parse_header(index, filename, filecontent, src, auto_methods):
 
 
 def parse_and_write_header(index, filename, filecontent, env):
-	defs = parse_header(index, filename, filecontent, env['src'], env['auto_methods'])
+	defs = parse_header(index, filename, filecontent, env)
 	write_header(filename, defs, env)
 
 	return defs
 
 
 def write_header(file, defs, env):
-	src = env['src']
 	header_defs = []
 	for class_name_full, content in defs.items():
 		class_name = content['class_name']
@@ -584,21 +606,20 @@ def write_header(file, defs, env):
 			([property_set_get_defs] if property_set_get_defs != '' else []) + \
 			([outside_bind] if outside_bind != '' else [])
 
-	file_name = filename_to_gen_filename(file, env)
+	gen_filename = filename_to_gen_filename(file, env)
 	content = ''
 	if len(defs) != 0:
-		header_include = '#include <cppscript_bindings.h>\n\n#include <{}>\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, src).replace('\\', '/'))
-		content = header_include + '\n'.join(header_defs)
+		header_include = '#include <cppscript_bindings.h>\n\n#include "{}"\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, os.path.dirname(gen_filename)).replace('\\', '/'))
+		content = DONOTEDIT_MSG + header_include + '\n'.join(header_defs)
 
-	os.makedirs(os.path.dirname(file_name), exist_ok=True)
-	with open(file_name, 'w') as fileopen:
+	os.makedirs(os.path.dirname(gen_filename), exist_ok=True)
+	with open(gen_filename, 'w') as fileopen:
 		fileopen.write(content)
 
 
 def write_register_header(defs_all, env):
-	src = env['src']
-	target = env['gen_header']
-	scripts_header = ''
+	target = os.path.join(env['header_dir'], 'scripts.gen.h')
+	scripts_header = DONOTEDIT_MSG
 	classes_register_levels = {name[12:] : [] for name in INIT_LEVELS}
 
 	for file, filecontent in defs_all['files'].items():
@@ -606,7 +627,7 @@ def write_register_header(defs_all, env):
 		if len(classes) == 0:
 			continue
 
-		scripts_header += '#include <{}>\n'.format(os.path.relpath(file, src).replace('\\', '/'))
+		scripts_header += '#include "{}"\n'.format(os.path.relpath(file, os.path.dirname(target)).replace('\\', '/'))
 		for class_name_full, content in classes.items():
 			# Ensure parent classes are registered before children
 			# by iterating throught pairs of (base_name, register_str)
@@ -644,8 +665,8 @@ def write_register_header(defs_all, env):
 
 
 def write_property_header(new_defs, env):
-	filepath = os.path.join(env['src'], 'properties.gen.h')
-	body = ''
+	filepath = os.path.join(env['header_dir'], 'properties.gen.h')
+	body = DONOTEDIT_MSG
 	for filename, filecontent in new_defs['files'].items():
 		classcontent = filecontent['content']
 		for class_name_full, content in classcontent.items():
