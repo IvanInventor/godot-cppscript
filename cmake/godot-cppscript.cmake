@@ -3,10 +3,15 @@ find_package(Python3 3.4 REQUIRED)
 set(CPPSCRIPT_DIR ${CMAKE_CURRENT_LIST_DIR}/..)
 
 #TODO: make it work in parallel
-function(create_cppscript_target HEADER_NAME HEADERS_DIR GEN_DIR AUTO_METHODS INCLUDE_PATHS COMPILE_DEFS CPPSCRIPT_SOURCES)
+function(create_cppscript_target TARGET_NAME HEADER_NAME HEADERS_DIR GEN_DIR AUTO_METHODS INCLUDE_PATHS COMPILE_DEFS)
+	# Handle empty lists
 	if("${COMPILE_DEFS}" STREQUAL "DEFS-NOTFOUND")
 		set(COMPILE_DEFS "")
 	endif()
+	if("${INCLUDE_PATHS}" STREQUAL "INC_PATHS-NOTFOUND")
+		set(INCLUDE_PATHS "")
+	endif()
+
 	if(${AUTO_METHODS})
 		set(AUTO_METHODS_STR "True")
 	else()
@@ -19,7 +24,6 @@ function(create_cppscript_target HEADER_NAME HEADERS_DIR GEN_DIR AUTO_METHODS IN
 		string(REGEX REPLACE "\.hpp$" ".gen.cpp" relative_path "${PATH}")
 		list(APPEND SOURCES_LIST ${GEN_DIR}/${relative_path})
 	endforeach()
-	set(${CPPSCRIPT_SOURCES} ${SOURCES_LIST} PARENT_SCOPE)
 
 	add_custom_command(
 		OUTPUT
@@ -44,5 +48,8 @@ function(create_cppscript_target HEADER_NAME HEADERS_DIR GEN_DIR AUTO_METHODS IN
 		VERBATIM
 		COMMENT "Parsing header files..."
 	)
+
+	target_sources(${TARGET_NAME} PRIVATE ${SOURCES_LIST})
+	target_include_directories(${TARGET_NAME} PUBLIC ${HEADERS_DIR} ${CPPSCRIPT_DIR}/src)
 endfunction()
 

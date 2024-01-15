@@ -3,6 +3,36 @@ import os, sys, json, hashlib, shutil
 
 if 'NOT_SCONS' not in os.environ.keys():
 	from SCons.Script import Glob
+	from SCons.Builder import Builder
+
+	def create_cppscript_target(env, sources, cppscript_env, *args, **kwargs):
+		if not 'CppScript' in env['BUILDERS'].keys():
+			env.Append(BUILDERS={'CppScript' : CppScriptBuilder()})
+		
+		return env.CppScript(sources, cppscript_env, *args, **kwargs)
+
+	class CppScriptBuilder():
+		def __init__(self, *args, **kwargs):
+			self.builder = Builder(action=generate_header_scons, emitter=generate_header_emitter, *args, **kwargs)
+
+		def __call__(self, scons_env, source, call_args, *args, **kwargs):
+			env, *other = call_args
+			cppscript_src = os.path.join(os.path.dirname(__file__), 'src')
+			# Convert scons variables to cppscript's env
+			scons_env['cppscript_env'] = {
+					'header_name' : env['header_name'],
+					'header_dir' : env['header_dir'],
+					'gen_dir' : env['gen_dir'],
+					'compile_defs' : [f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env.get('compile_defs', [])],
+					'include_paths' : [cppscript_src] + env.get('include_paths', []),
+					'auto_methods' : env['auto_methods']
+				}
+
+			# Append needed directories
+			scons_env.Append(CPPPATH=[cppscript_src, env['header_dir']])
+			return self.builder(scons_env, source=source, *other, *args, **kwargs)
+
+
 	def GlobRecursive(path, pattern, **kwargs):
 		found = []
 		for root, dirs, files in os.walk(path):
@@ -151,29 +181,23 @@ def is_virtual_method(cursor):
 
 # Builder
 def generate_header_emitter(target, source, env):
-	return [env.File(os.path.join(env['header_dir'], 'scripts.gen.h'))] + [env.File(filename_to_gen_filename(str(i), env)) for i in source], source
+	generated = [env.File(filename_to_gen_filename(str(i), env['cppscript_env'])) for i in source]
+
+	# To avoid generated sources deletion and re-parsing
+	env.Precious(generated)
+
+	return generated, source
 
 
 def generate_header_scons(target, source, env):
-	# Convert scons variables to cppscript's env
-	cppscript_env = {
-			'header_name' : env['header_name'],
-			'header_dir' : env['header_dir'],
-			'gen_dir' : env['gen_dir'],
-			'compile_defs' : [f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env['CPPDEFINES']],
-			'include_paths' : env['CPPPATH'],
-			'auto_methods' : env['auto_methods']
-		}
-
-
-	return generate_header(target, source, cppscript_env, get_file_scons)
+	return generate_header(source, env['cppscript_env'], get_file_scons)
 
 
 def generate_header_cmake(source, env):
-	return generate_header(None, source, env, get_file_cmake)
+	return generate_header(source, env, get_file_cmake)
 
 
-def generate_header(target, source, env, get_file):
+def generate_header(source, env, get_file):
 	index = Index.create()
 	prop_file_name = os.path.join(env['header_dir'], 'properties.gen.h') 
 

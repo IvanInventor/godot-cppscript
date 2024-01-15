@@ -66,27 +66,47 @@ if(${GODOT_CPP_WARNING_AS_ERROR})
 endif()
 
 ###############################
+# godot-cppscript creation
+
+# include module
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 include(godot-cppscript)
 
-set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../src)
-set(GEN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../.gen)
-
+# Get header files (.hpp only)
 file(GLOB_RECURSE CPPSCRIPT_HEADERS ../src/*.hpp)
 
-get_target_property(DEFS ${PROJECT_NAME} COMPILE_DEFINITIONS)
-get_target_property(INC_PATHS ${PROJECT_NAME} INCLUDE_DIRECTORIES)
-create_cppscript_target(
-	cppscript.h
-	${INCLUDE_DIR}
-	${GEN_DIR}
-	ON
-	"${INC_PATHS}"
-	"${DEFS}"
-	CPPSCRIPT_MY_SOURCES
-)
+# Optional
 
-target_sources(${PROJECT_NAME} PRIVATE ${CPPSCRIPT_MY_SOURCES})
-target_include_directories(${PROJECT_NAME} PRIVATE ${INCLUDE_DIR} src)
+# C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
+# enable, if you conditionally enable classes/members
+# based on definitions
+#get_target_property(DEFS ${PROJECT_NAME} COMPILE_DEFINITIONS)
+
+# Include paths
+# (try to avoid godot-cpp headers paths,
+# it slows parsing drastically)
+#get_target_property(INC_PATHS ${PROJECT_NAME} INCLUDE_DIRECTORIES)
+create_cppscript_target(
+	# Name of your main target
+	${PROJECT_NAME}
+
+	# Name of header to be included to enable cppscript
+	# (Prefer name unique to your project)
+	cppscript.h
+
+	# FULL PATH to C++ header files
+	${CMAKE_CURRENT_SOURCE_DIR}/../src
+
+	# FULL PATH to generated object files
+	${CMAKE_CURRENT_SOURCE_DIR}/../.gen
+
+	# Generate bindings to public methods automatically
+	# or require GMETHOD() before methods
+	ON
+
+	# Optional
+	""	# OR "${INC_PATHS}"
+	""	# OR "${DEFS}"
+)
 ###############################
 

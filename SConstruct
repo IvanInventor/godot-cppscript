@@ -1,4 +1,4 @@
-from cppscript import GlobRecursive, generate_header_scons, generate_header_emitter
+from cppscript import create_cppscript_target, GlobRecursive
 import os
 
 SRC_DIR = '../src'
@@ -9,37 +9,56 @@ env = SConscript('godot-cpp/SConstruct').Clone()
 sources = GlobRecursive(SRC_DIR, '*.cpp')
 scripts = GlobRecursive(SRC_DIR, '*.hpp')
 
-env.Append(CPPPATH=[SRC_DIR, 'src'])
-								# CppScript config
-env['header_name'] = 'cppscript.h'				# Name of header to be included to enable cppscript
-								# (Prefer name unique to your project)
-env['header_dir'] = SRC_DIR					# Path to C++ header files
-env['gen_dir'] = "../.gen"					# Path for generated object files
-env['auto_methods'] = True					# Generate bindings to public methods automatically
-								# Or require GMETHOD() before methods
 env.Append(CXXFLAGS='-fdiagnostics-color=always')
-env.Append(BUILDERS={'CppScript' : Builder(
-    action=generate_header_scons,
-    emitter=generate_header_emitter)})
 
-generated = env.CppScript(scripts)
-header, *bindings = generated
+generated = create_cppscript_target(
+		env,		# SCons env, env.Clone() for different projects
+		scripts,	# Header files to parse (.hpp only)
 
-env.Precious(generated)
+		# CppScript config
+		{
+		# Name of header to be included to enable cppscript
+		# (Prefer name unique to your project)
+		'header_name' : 'cppscript.h',
+
+		# Path to C++ header files
+		'header_dir' : SRC_DIR,
+
+		# Path to generated object files
+		'gen_dir' : "../.gen",
+
+		# Generate bindings to public methods automatically
+		# or require GMETHOD() before methods
+		'auto_methods' : True,
+
+		# Optional
+
+		## C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
+		## enable, if you conditionally enable classes/members
+		## based on definitions
+		#'compile_defs' : env['CPPDEFINES'],
+		#
+		## Include paths
+		## (try to avoid godot-cpp headers paths,
+		## it slows parsing drastically)
+		#'include_paths' : env['CPPPATH']
+		}
+)
 
 if env["platform"] == "macos":
     library = env.SharedLibrary(
 	"../bin/lib{}.{}.{}.framework/lib{}.{}.{}".format(
 	library_name, env["platform"], env["target"], library_name, env["platform"], env["target"]
 	),
-	source=sources + bindings,
+	source=sources + generated, # Add generated source files to target
     )
 else:
     library = env.SharedLibrary(
 	"../bin/lib{}{}{}".format(library_name, env["suffix"], env["SHLIBSUFFIX"]),
-	source=sources + bindings,
+	source=sources + generated, # Add generated source files to target
     )
 
+# Rebuild after headers change
 env.Depends(library[0].sources, generated)
 
 Default(library)
