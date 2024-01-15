@@ -3,7 +3,7 @@ find_package(Python3 3.4 REQUIRED)
 set(CPPSCRIPT_DIR ${CMAKE_CURRENT_LIST_DIR})
 
 #TODO: make it work in parallel
-function(create_cppscript_target TARGET_NAME HEADER_NAME HEADERS_DIR GEN_DIR AUTO_METHODS COMPILE_DEFS INCLUDE_PATHS)
+function(create_cppscript_target TARGET_NAME HEADERS_LIST HEADER_NAME HEADERS_DIR GEN_DIR AUTO_METHODS COMPILE_DEFS INCLUDE_PATHS)
 	# Handle empty/NOTFOUND lists
 	if(NOT INCLUDE_PATHS)
 		set(INCLUDE_PATHS "")
@@ -19,11 +19,10 @@ function(create_cppscript_target TARGET_NAME HEADER_NAME HEADERS_DIR GEN_DIR AUT
 		set(AUTO_METHODS_STR "False")
 	endif()
 
-	file(GLOB_RECURSE HEADERS_LIST RELATIVE ${HEADERS_DIR} ${HEADERS_DIR}/*.hpp)
-	
 	foreach(PATH ${HEADERS_LIST})
+		file(RELATIVE_PATH PATH "${HEADERS_DIR}" "${PATH}")
 		string(REGEX REPLACE "\.hpp$" ".gen.cpp" relative_path "${PATH}")
-		list(APPEND SOURCES_LIST ${GEN_DIR}/${relative_path})
+		list(APPEND SOURCES_LIST "${GEN_DIR}/${relative_path}")
 	endforeach()
 
 	add_custom_command(
@@ -42,9 +41,9 @@ function(create_cppscript_target TARGET_NAME HEADER_NAME HEADERS_DIR GEN_DIR AUT
 			"--definitions" ${COMPILE_DEFS}
 			"--include-paths" ${CPPSCRIPT_DIR}/src ${HEADERS_DIR} ${INCLUDE_PATHS}
 			"--"
-			${CPPSCRIPT_HEADERS}
+			${HEADERS_LIST}
 
-		DEPENDS ${CPPSCRIPT_HEADERS}
+		DEPENDS ${HEADERS_LIST}
 		WORKING_DIRECTORY ${CPPSCRIPT_DIR}
 		VERBATIM
 		COMMAND_EXPAND_LISTS
@@ -52,6 +51,6 @@ function(create_cppscript_target TARGET_NAME HEADER_NAME HEADERS_DIR GEN_DIR AUT
 	)
 
 	target_sources(${TARGET_NAME} PRIVATE ${SOURCES_LIST})
-	target_include_directories(${TARGET_NAME} PUBLIC ${HEADERS_DIR} ${CPPSCRIPT_DIR}/src)
+	target_include_directories(${TARGET_NAME} PUBLIC ${CPPSCRIPT_DIR}/src ${HEADERS_DIR})
 endfunction()
 

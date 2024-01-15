@@ -9,6 +9,7 @@
 
 #define LIBRARY_INIT_FUNC initialize_ ## LIBRARY_NAME ## _module
 #define LIBRARY_UNINIT_FUNC uninitialize_ ## LIBRARY_NAME ## _module
+#define LIBRARY_ENTRY_SYMBOL_FUNC LIBRARY_NAME ## _library_init
 
 void LIBRARY_INIT_FUNC(godot::ModuleInitializationLevel p_level);
 void LIBRARY_UNINIT_FUNC(godot::ModuleInitializationLevel p_level);
