@@ -3,14 +3,15 @@ find_package(Python3 3.4 REQUIRED)
 set(CPPSCRIPT_DIR ${CMAKE_CURRENT_LIST_DIR}/..)
 
 #TODO: make it work in parallel
-function(create_cppscript_target TARGET_NAME HEADER_NAME HEADERS_DIR GEN_DIR AUTO_METHODS INCLUDE_PATHS COMPILE_DEFS)
-	# Handle empty lists
-	if("${COMPILE_DEFS}" STREQUAL "DEFS-NOTFOUND")
-		set(COMPILE_DEFS "")
-	endif()
-	if("${INCLUDE_PATHS}" STREQUAL "INC_PATHS-NOTFOUND")
+function(create_cppscript_target TARGET_NAME HEADER_NAME HEADERS_DIR GEN_DIR AUTO_METHODS COMPILE_DEFS INCLUDE_PATHS)
+	# Handle empty/NOTFOUND lists
+	if(NOT INCLUDE_PATHS)
 		set(INCLUDE_PATHS "")
 	endif()
+	if(NOT COMPILE_DEFS)
+		set(COMPILE_DEFS "")
+	endif()
+
 
 	if(${AUTO_METHODS})
 		set(AUTO_METHODS_STR "True")
@@ -46,6 +47,7 @@ function(create_cppscript_target TARGET_NAME HEADER_NAME HEADERS_DIR GEN_DIR AUT
 		DEPENDS ${CPPSCRIPT_HEADERS}
 		WORKING_DIRECTORY ${CPPSCRIPT_DIR}
 		VERBATIM
+		COMMAND_EXPAND_LISTS
 		COMMENT "Parsing header files..."
 	)
 

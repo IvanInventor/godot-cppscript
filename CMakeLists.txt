@@ -75,17 +75,7 @@ include(godot-cppscript)
 # Get header files (.hpp only)
 file(GLOB_RECURSE CPPSCRIPT_HEADERS ../src/*.hpp)
 
-# Optional
-
-# C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
-# enable, if you conditionally enable classes/members
-# based on definitions
-#get_target_property(DEFS ${PROJECT_NAME} COMPILE_DEFINITIONS)
-
-# Include paths
-# (try to avoid godot-cpp headers paths,
-# it slows parsing drastically)
-#get_target_property(INC_PATHS ${PROJECT_NAME} INCLUDE_DIRECTORIES)
+# Call function to configure your target
 create_cppscript_target(
 	# Name of your main target
 	${PROJECT_NAME}
@@ -105,8 +95,16 @@ create_cppscript_target(
 	ON
 
 	# Optional
-	""	# OR "${INC_PATHS}"
-	""	# OR "${DEFS}"
+
+	# C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
+	# Enable, if you conditionally enable classes/members
+	# based on definitions
+	"" # $<TARGET_PROPERTY:godot-cpp,COMPILE_DEFINITIONS>
+
+	# Include paths
+	# (Try to avoid godot-cpp headers paths,
+	# it slows parsing drastically)
+	"" # $<TARGET_PROPERTY:${PROJECT_NAME},INCLUDE_DIRECTORIES>
 )
 ###############################
 

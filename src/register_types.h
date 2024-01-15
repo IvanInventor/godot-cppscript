@@ -3,10 +3,6 @@
 #define REGISTER_TYPES_H
 
 #include <godot_cpp/core/class_db.hpp>
-#include <godot_cpp/classes/multiplayer_api.hpp>
-#include <godot_cpp/classes/multiplayer_peer.hpp>
-
-#include "scripts.gen.h"
 
 using namespace godot;
 

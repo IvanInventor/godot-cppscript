@@ -21,8 +21,8 @@ env = {
 	'header_name' : args.header_name[0],
 	'header_dir' : args.header_dir[0],
 	'gen_dir' : args.gen_dir[0],
-	'compile_defs' : args.definitions,
-	'include_paths' :  args.include_paths,
+	'compile_defs' : set(args.definitions),
+	'include_paths' :  set(args.include_paths),
 	'auto_methods' : args.auto_methods
 }
 

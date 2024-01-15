@@ -34,12 +34,12 @@ generated = create_cppscript_target(
 		# Optional
 
 		## C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
-		## enable, if you conditionally enable classes/members
+		## Enable, if you conditionally enable classes/members
 		## based on definitions
 		#'compile_defs' : env['CPPDEFINES'],
 		#
 		## Include paths
-		## (try to avoid godot-cpp headers paths,
+		## (Try to avoid godot-cpp headers paths,
 		## it slows parsing drastically)
 		#'include_paths' : env['CPPPATH']
 		}

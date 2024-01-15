@@ -23,8 +23,8 @@ if 'NOT_SCONS' not in os.environ.keys():
 					'header_name' : env['header_name'],
 					'header_dir' : env['header_dir'],
 					'gen_dir' : env['gen_dir'],
-					'compile_defs' : [f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env.get('compile_defs', [])],
-					'include_paths' : [cppscript_src] + env.get('include_paths', []),
+					'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env.get('compile_defs', [])},
+					'include_paths' : {cppscript_src}.union({str(path) for path in env.get('include_paths', [])}),
 					'auto_methods' : env['auto_methods']
 				}
 
@@ -190,10 +190,12 @@ def generate_header_emitter(target, source, env):
 
 
 def generate_header_scons(target, source, env):
+	print(json.dumps(env['cppscript_env'], indent=2, default=lambda x: list(x) if type(x) is set else None))
 	return generate_header(source, env['cppscript_env'], get_file_scons)
 
 
 def generate_header_cmake(source, env):
+	print(json.dumps(env, indent=2, default=lambda x: list(x) if type(x) is set else x))
 	return generate_header(source, env, get_file_cmake)
 
 
