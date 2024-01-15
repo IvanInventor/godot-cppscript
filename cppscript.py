@@ -190,12 +190,14 @@ def generate_header_emitter(target, source, env):
 
 
 def generate_header_scons(target, source, env):
-	print(json.dumps(env['cppscript_env'], indent=2, default=lambda x: list(x) if type(x) is set else None))
+	if "CPPSCRIPT_DEBUG" in os.environ.keys():
+		print(json.dumps(env['cppscript_env'], indent=2, default=lambda x: list(x) if type(x) is set else x))
 	return generate_header(source, env['cppscript_env'], get_file_scons)
 
 
 def generate_header_cmake(source, env):
-	print(json.dumps(env, indent=2, default=lambda x: list(x) if type(x) is set else x))
+	if "CPPSCRIPT_DEBUG" in os.environ.keys():
+		print(json.dumps(env, indent=2, default=lambda x: list(x) if type(x) is set else x))
 	return generate_header(source, env, get_file_cmake)
 
 
@@ -233,7 +235,7 @@ def generate_header(source, env, get_file):
 		for s in source:
 			filename, file_content = get_file(s)
 			new_hash = hashlib.md5(file_content.encode()).hexdigest()
-			if filename not in cached_defs.keys() or new_hash != cached_defs[filename]['hash']:
+			if not os.path.exists(filename_to_gen_filename(filename, env)) or filename not in cached_defs.keys() or new_hash != cached_defs[filename]['hash']:
 				need_regen = True
 				new_defs_files |= {filename : {'content' : parse_and_write_header(index, filename, file_content, env), 'hash' : new_hash}}
 			else:
