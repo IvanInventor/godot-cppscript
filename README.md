@@ -1,8 +1,10 @@
+**[Documentation](https://github.com/IvanInventor/godot-cppscript/wiki) | [Usage example](#usage-example)**
+
 # godot-cpp-script
 
-Python script that implements various C++ macros to automate binding code generation. Used as SCons custom builder besides default library builder. Works similar to [Unreal Header Tool](https://docs.unrealengine.com/5.3/en-US/unreal-header-tool-for-unreal-engine/).
+Python script that uses various C++ macros and templates to automate binding code generation and provide short and readable godot-cpp-specific compile error messages. With simple configuration, can attach to existing SCons/CMake build tool. Works similar to [Unreal Header Tool](https://docs.unrealengine.com/5.3/en-US/unreal-header-tool-for-unreal-engine/).
 
-[Example project](https://github.com/IvanInventor/godot-cppscript-example)
+[Example project](https://github.com/IvanInventor/godot-cppscript-example) 
 
 [Keywords description](https://github.com/IvanInventor/godot-cppscript-example/blob/master/src/example.hpp) (read comments)
 
@@ -13,64 +15,191 @@ Python script that implements various C++ macros to automate binding code genera
 
 [Requirements](https://docs.godotengine.org/en/stable/contributing/development/compiling/index.html#building-for-target-platforms) from official guide for your OS
 
-
-
 #### Python dependencies
 libclang
 ```bash
 pip install libclang
 ```
-## Installation
+
+## Installation as project submodule
 
 ### Recommended project layout
 ```
-/                 project directory
-├── project		  godot project root (res://)
-├── bin           compiled binaries
-├── cppscript     submodule 
-└── src           C++ source files
+/                   project root
+├── project 		godot project root (res://)
+├── bin             compiled binaries
+├── external        submodules
+│   ├── cppscript
+│   └── godot-cpp
+└── src             C++ source files
  ```
-### As project submodule
 
-- From root of your project (git initialized)
+#
+### Installation
+
+#### From zero
+Install template from [here](https://github.com/IvanInventor/godot-cppscript-template).
+
+#### To existing project
+- From root of your project
 ```bash
-git submodule add https://github.com/IvanInventor/godot-cpp-script cppscript
-git submodule update --recursive --init cppscript
+git submodule add https://github.com/IvanInventor/godot-cppscript external/cppscript
+git submodule update --init external/cppscript
 ```
-- Checkout your version of godot
-    - For stable releases: checkout one of [tags](https://github.com/godotengine/godot-cpp/tags)
+- Copy and modify some files (library_name = 'scripts')
+  - By script
+    - With cmake
     ```bash
-    cd cppscript/godot-cpp/
-    git checkout <tag>
+    # Usage:
+    # cmake -P external/cppscript/cppscript-configure.cmake <library_name> <src_dir> <project_dir>
+    cmake -P external/cppscript/cppscript-configure.cmake scripts src/ project/
     ```
-    - For custom builds (from [guide](https://docs.godotengine.org/en/stable/tutorials/scripting/gdextension/gdextension_cpp_example.html#building-the-c-bindings)):
+   	OR
+    - With Python
     ```bash
-    # switch to branch corresponding to godot version
-    # Godot 4.1.3 -> 4.1
-    cd cppscript/godot-cpp/
-    git pull origin 4.1
-    git switch 4.1
-    # Generate custom bindings
-    ./your_godot_executable --dump-extension-api
-    mv extension_api.json gdextension/extension_api.json
+    # Usage:
+    # python3 external/cppscript/cppscript-configure.cmake <library_name> <src_dir> <project_dir>
+    python3 external/cppscript/cppscript-configure.cmake scripts src/ project/
     ```
+  	OR
+  - By hand, replacing `@LIBRARY_NAME@` in files with you library name
+    - [templates/scripts.gdextension](/templates/scripts.gdextension) -> project/<library_name>.gdextension
+    - [templates/register_types.cpp](/templates/register_types.cpp) -> src/register_types.cpp
+    - [templates/register_types.h](/templates/register_types.h) -> src/register_types.h
 
-- Copy [scripts.gdextension](/scripts.gdextension) file to godot project (rename library name in file and filename if needed)
-## Build project
-From cppscript/
-```bash
-scons
-```
-or
-```bash
-scons build_library=false
-```
-after building library for your target once (saves couple of seconds)
+- Create cppscript target in your build script
+  - SCons
+  ```python
+  # import module
+  import sys
+  sys.path.append('external/cppscript')
+  from cppscript import create_cppscript_target
+  from cppscript import GlobRecursive # Optional
 
-## All working features
-#### Example class in header (read comments)
+  # ...
+
+  # Get list of headers (*.hpp only)
+  scripts = GlobRecursive('src', '*.hpp')
+  
+  # Create target, returns generated .cpp files list
+  generated = create_cppscript_target(
+  		env,		# SCons env, env.Clone() for different projects
+  		scripts,	# Header files to parse
+  
+  		# CppScript config
+  		{
+  		# Name of header to be included to enable cppscript
+  		# (Prefer name unique to your project)
+  		'header_name' : 'cppscript.h',
+  
+  		# Path to C++ header files
+  		'header_dir' : 'src',
+  
+  		# Path to generated object files
+  		'gen_dir' : ".gen",
+  
+  		# Generate bindings to public methods automatically
+  		# or require GMETHOD() before methods
+  		'auto_methods' : True,
+  
+  		# Optional
+  
+  		## C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
+  		## Enable, if you conditionally enable classes/members
+  		## based on definitions
+  		#'compile_defs' : env['CPPDEFINES'],
+  		#
+  		## Include paths
+  		## (Try to avoid godot-cpp headers paths,
+  		## it slows parsing drastically)
+  		#'include_paths' : env['CPPPATH']
+  		}
+  )
+  
+  # Your project's target generation
+  # You only need to modify it
+  if env["platform"] == "macos":
+      library = env.SharedLibrary(
+  	"bin/lib{}.{}.{}.framework/lib{}.{}.{}".format(
+  	library_name, env["platform"], env["target"], library_name, env["platform"], env["target"]
+  	),
+  	# source=sources
+  	source=sources + generated, # Add generated source files to target
+      )
+  else:
+      library = env.SharedLibrary(
+  	"bin/lib{}{}{}".format(library_name, env["suffix"], env["SHLIBSUFFIX"]),
+  	# source=sources
+  	source=sources + generated, # Add generated source files to target
+      )
+  
+  # Rebuild after headers change
+  env.Depends(library[0].sources, generated)
+  ```
+  
+  - Cmake
+  ```cmake
+  # Include module
+  list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/cppscript")
+  include(godot-cppscript)
+  
+  # Get header files (.hpp only)
+  file(GLOB_RECURSE CPPSCRIPT_HEADERS src/*.hpp)
+  
+  # Call function to configure your target
+  create_cppscript_target(
+  	# Name of your main target
+  	${PROJECT_NAME}
+  
+  	# Header files to parse
+  	"${CPPSCRIPT_HEADERS}"
+  
+  	# Name of header to be included to enable cppscript
+  	# (Prefer name unique to your project)
+  	cppscript.h
+  
+  	# FULL PATH to C++ header files
+  	${CMAKE_CURRENT_SOURCE_DIR}/src
+  
+  	# FULL PATH to generated object files
+  	${CMAKE_CURRENT_SOURCE_DIR}/.gen
+  
+  	# Generate bindings to public methods automatically
+  	# or require GMETHOD() before methods
+  	ON
+  
+  	# Optional
+  
+  	# C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
+  	# Enable, if you conditionally enable classes/members
+  	# based on definitions
+  	"" # $<TARGET_PROPERTY:godot-cpp,COMPILE_DEFINITIONS>
+  
+  	# Include paths
+  	# (Try to avoid godot-cpp headers paths,
+  	# it slows parsing drastically)
+  	"" # $<TARGET_PROPERTY:${PROJECT_NAME},INCLUDE_DIRECTORIES>
+  )
+
+  ```
+
+## Usage example
+
+#### Header syntax (read comments)
 ```cpp
-class Example : public Control {
+#include <godot_cpp/classes/control.hpp>
+#include <godot_cpp/classes/image.hpp>
+#include <godot_cpp/classes/input_event_key.hpp>
+#include <godot_cpp/classes/tile_map.hpp>
+#include <godot_cpp/classes/tile_set.hpp>
+#include <godot_cpp/classes/viewport.hpp>
+
+// Include cppscript header (prefer custom name)
+#include <cppscript.h>
+
+using namespace godot;
+
+class ExampleForRepo : public Control {
 
 	// Signals
 	GSIGNAL(example_signal, float typed_arg, untyped_arg);
@@ -135,16 +264,16 @@ public:
 	GIGNORE();
 	int ignore_method();
 
-    GIGNORE();
+    	GIGNORE();
 	enum ignore_enum {
         ONE,
         TWO,
-    }
+    	};
 
-    GIGNORE();
+    	GIGNORE();
 	enum {
-        IGNORE_CONSTANT = 42,
-    }
+        	IGNORE_CONSTANT = 42,
+    	};
 
 	// Vararg method
 	GVARARG(String named_arg, unnamed_arg);
@@ -152,7 +281,7 @@ public:
 
 	// Default argument values
 	int def_args(int p_a = 100, int p_b = 200);
-    int def_args_string(String s = String("default"));  // Workaround for String 
+    	int def_args_string(String s = String("default"));  // Workaround for String 
 
 	// RPC method 
 	GRPC(authority, reliable, call_local);
@@ -185,44 +314,47 @@ public:
 	// basic class 		GCLASS(name, base_name)
 	// virtual class 	GVIRTUAL_CLASS(name, base_name)
 	// abstract class 	GABSTRACT_CLASS(name, base_name)
-	GCLASS(Example, Control);
+	GCLASS(ExampleForRepo, Control);
 };
+
 ```
 #### Generated code
 ```cpp
+/*-- GENERATED FILE - DO NOT EDIT --*/
+
 #include <cppscript_bindings.h>
 
-#include <exampleinrepo.hpp>
+#include "../src/example_for_repo.hpp"
 
 using namespace godot;
 
-// Example : Control
+// ExampleForRepo : Control
 
-void Example::_bind_methods() {
-	Method<&Example::set_custom_position>::bind(D_METHOD("set_custom_position", "pos"));
-	Method<&Example::get_custom_position>::bind(D_METHOD("get_custom_position"));
-	Method<&Example::simple_func>::bind(D_METHOD("simple_func"));
-	Method<&Example::simple_const_func>::bind(D_METHOD("simple_const_func"));
-	Method<&Example::image_ref_func>::bind(D_METHOD("image_ref_func", "p_image"));
-	Method<&Example::image_const_ref_func>::bind(D_METHOD("image_const_ref_func", "p_image"));
-	Method<&Example::return_something>::bind(D_METHOD("return_something", "base"));
-	Method<&Example::return_something_const>::bind(D_METHOD("return_something_const"));
-	Method<&Example::def_args>::bind(D_METHOD("def_args", "p_a", "p_b"), DEFVAL(100), DEFVAL(200));
-	Method<&Example::def_args_string>::bind(D_METHOD("def_args_string", "s"), DEFVAL(String("default")));
-	Method<&Example::rpc_example>::bind(D_METHOD("rpc_example", "p_value"));
-	Method<&Example::rpc_example2>::bind(D_METHOD("rpc_example2"));
-	Method<&Example::register_this>::bind(D_METHOD("register_this"));
-	Method<&Example::virtual_example>::bind(D_METHOD("virtual_example"));
-	Method<&Example::get_float_auto>::bind(D_METHOD("get_float_auto"));
-	Method<&Example::set_float_auto>::bind(D_METHOD("set_float_auto", "value"));
-	Method<&Example::get_float_hint>::bind(D_METHOD("get_float_hint"));
-	Method<&Example::set_float_hint>::bind(D_METHOD("set_float_hint", "value"));
-
-
-	StaticMethod<&Example::test_static>::bind(get_class_static(), D_METHOD("test_static", "p_a", "p_b"));
+void ExampleForRepo::_bind_methods() {
+	Method<&ExampleForRepo::set_custom_position>::bind(D_METHOD("set_custom_position", "pos"));
+	Method<&ExampleForRepo::get_custom_position>::bind(D_METHOD("get_custom_position"));
+	Method<&ExampleForRepo::simple_func>::bind(D_METHOD("simple_func"));
+	Method<&ExampleForRepo::simple_const_func>::bind(D_METHOD("simple_const_func"));
+	Method<&ExampleForRepo::image_ref_func>::bind(D_METHOD("image_ref_func", "p_image"));
+	Method<&ExampleForRepo::image_const_ref_func>::bind(D_METHOD("image_const_ref_func", "p_image"));
+	Method<&ExampleForRepo::return_something>::bind(D_METHOD("return_something", "base"));
+	Method<&ExampleForRepo::return_something_const>::bind(D_METHOD("return_something_const"));
+	Method<&ExampleForRepo::def_args>::bind(D_METHOD("def_args", "p_a", "p_b"), DEFVAL(100), DEFVAL(200));
+	Method<&ExampleForRepo::def_args_string>::bind(D_METHOD("def_args_string", "s"), DEFVAL(String("default")));
+	Method<&ExampleForRepo::rpc_example>::bind(D_METHOD("rpc_example", "p_value"));
+	Method<&ExampleForRepo::rpc_example2>::bind(D_METHOD("rpc_example2"));
+	Method<&ExampleForRepo::register_this>::bind(D_METHOD("register_this"));
+	Method<&ExampleForRepo::virtual_example>::bind(D_METHOD("virtual_example"));
+	Method<&ExampleForRepo::get_float_auto>::bind(D_METHOD("get_float_auto"));
+	Method<&ExampleForRepo::set_float_auto>::bind(D_METHOD("set_float_auto", "value"));
+	Method<&ExampleForRepo::get_float_hint>::bind(D_METHOD("get_float_hint"));
+	Method<&ExampleForRepo::set_float_hint>::bind(D_METHOD("set_float_hint", "value"));
 
 
-	Method<&Example::varargs_func_example>::bind_vararg("varargs_func_example"
+	StaticMethod<&ExampleForRepo::test_static>::bind(get_class_static(), D_METHOD("test_static", "p_a", "p_b"));
+
+
+	Method<&ExampleForRepo::varargs_func_example>::bind_vararg("varargs_func_example"
 		,MakePropertyInfo<String>("named_arg")
 		,MakePropertyInfo<Variant>("unnamed_arg")
 		);
@@ -253,8 +385,7 @@ void Example::_bind_methods() {
 	BIND_CONSTANT(CONSTANT_WITHOUT_ENUM);
 }
 
-// Call this in _ready() to configure RPC for your node
-void Example::_rpc_config() {
+void ExampleForRepo::_rpc_config() {
 	{
 	Dictionary opts;
 	opts["rpc_mode"] = MultiplayerAPI::RPC_MODE_AUTHORITY;
@@ -273,14 +404,16 @@ void Example::_rpc_config() {
 	}
 }
 
-// Expands into setter/getter definitions
-GENERATE_GETTER(Example::get_float_auto, Example::float_auto);
-GENERATE_SETTER(Example::set_float_auto, Example::float_auto);
-GENERATE_GETTER(Example::get_float_hint, Example::float_hint);
-GENERATE_SETTER(Example::set_float_hint, Example::float_hint);
+GENERATE_GETTER(ExampleForRepo::get_float_auto, ExampleForRepo::float_auto);
+GENERATE_SETTER(ExampleForRepo::set_float_auto, ExampleForRepo::float_auto);
+GENERATE_GETTER(ExampleForRepo::get_float_hint, ExampleForRepo::float_hint);
+GENERATE_SETTER(ExampleForRepo::set_float_hint, ExampleForRepo::float_hint);
 
-// godot-cpp macros to register enums/bitfields
-// and be able to use them as method arguments
-VARIANT_ENUM_CAST(Example::Constants);
-VARIANT_BITFIELD_CAST(Example::Flags);
+VARIANT_ENUM_CAST(ExampleForRepo::Constants);
+VARIANT_BITFIELD_CAST(ExampleForRepo::Flags);
+
 ```
+
+
+
+
