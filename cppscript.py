@@ -518,7 +518,7 @@ def parse_header(index, filename, filecontent, env):
 
 		leftover = collapse_list(class_macros, lambda x: x.kind != CursorKind.MACRO_INSTANTIATION, apply_macros)
 		for macro in leftover:
-			if macro.spelling not in ['GSIGNAL', 'GGROUP', 'GSUBGROUP']:
+			if macro.spelling not in ['GSIGNAL', 'GGROUP', 'GSUBGROUP'] + INIT_LEVELS:
 				raise CppScriptException('{}:{}:{}: error: macro without target member'
 				.format(filename, macro.location.line, macro.location.column))
 		process_macros(None, leftover, None)
@@ -669,8 +669,16 @@ def write_register_header(defs_all, env):
 				classes_register.append((base, f"\tGDREGISTER_{content['type']}({class_name_full});\n"))
 
 
-	scripts_header += '\nusing namespace godot;\n\n'
 	classes_register_str = ''
+	if classes_register_levels['CORE'] != []:
+		minimal_register_level = 'MODULE_INITIALIZATION_LEVEL_CORE'
+	elif classes_register_levels['SERVERS'] != []:
+		minimal_register_level = 'MODULE_INITIALIZATION_LEVEL_SERVERS'
+	else:
+		minimal_register_level = 'MODULE_INITIALIZATION_LEVEL_SCENE'
+
+	scripts_header += '\nusing namespace godot;\n\n' + \
+			f'static const ModuleInitializationLevel DEFAULT_INIT_LEVEL = {minimal_register_level};\n\n'
 	for level_name, defs in classes_register_levels.items():
 		registers = ''.join(i for _, i in defs)
 		classes_register_str += '_FORCE_INLINE_ void _register_level_{}() {{{}}}\n\n'.format(

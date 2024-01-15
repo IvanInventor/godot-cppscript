@@ -2,10 +2,7 @@
 *.so
 *.os
 *.o
-
-# Generated files
-*scripts.gen.h
-*defs.json
+*.obj
 
 # Scons specific
 *.sconsign.dblite

@@ -1,0 +1,16 @@
+// Template file to use with godot-cppscript
+#ifndef REGISTER_TYPES_H
+#define REGISTER_TYPES_H
+
+#include <godot_cpp/core/class_db.hpp>
+
+// Modify this variable
+#define LIBRARY_NAME scripts
+
+#define LIBRARY_INIT_FUNC initialize_ ## LIBRARY_NAME ## _module
+#define LIBRARY_UNINIT_FUNC uninitialize_ ## LIBRARY_NAME ## _module
+
+void LIBRARY_INIT_FUNC(godot::ModuleInitializationLevel p_level);
+void LIBRARY_UNINIT_FUNC(godot::ModuleInitializationLevel p_level);
+
+#endif // REGISTER_TYPES_H
