@@ -24,7 +24,7 @@ if 'NOT_SCONS' not in os.environ.keys():
 					'header_dir' : env['header_dir'],
 					'gen_dir' : env['gen_dir'],
 					'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env.get('compile_defs', [])},
-					'include_paths' : {cppscript_src}.union({str(path) for path in env.get('include_paths', [])}),
+					'include_paths' : {cppscript_src, env['header_dir']}.union({str(path) for path in env.get('include_paths', [])}),
 					'auto_methods' : env['auto_methods']
 				}
 
@@ -303,7 +303,7 @@ def parse_header(index, filename, filecontent, env):
 					elif cursor.spelling in INIT_LEVELS:
 						keyword_macros.append(cursor)
 
-					elif cursor.spelling in ['GCLASS', 'GVIRTUAL_CLASS', 'GABSTRACT_CLASS']:
+					elif cursor.spelling in ['GCLASS', 'GVIRTUAL_CLASS', 'GABSTRACT_CLASS', 'GINTERNAL_CLASS']:
 						classes_and_Gmacros.append(cursor)
 
 				case _:
