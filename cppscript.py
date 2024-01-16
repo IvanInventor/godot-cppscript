@@ -15,21 +15,21 @@ if 'NOT_SCONS' not in os.environ.keys():
 		def __init__(self, *args, **kwargs):
 			self.builder = Builder(action=generate_header_scons, emitter=generate_header_emitter, *args, **kwargs)
 
-		def __call__(self, scons_env, source, call_args, *args, **kwargs):
+		def __call__(self, scons_env, source, call_args, cwd = os.getcwd(), *args, **kwargs):
 			env, *other = call_args
 			cppscript_src = os.path.join(os.path.dirname(__file__), 'src')
 			# Convert scons variables to cppscript's env
 			scons_env['cppscript_env'] = {
 					'header_name' : env['header_name'],
-					'header_dir' : env['header_dir'],
-					'gen_dir' : env['gen_dir'],
+					'header_dir' : resolve_path(str(env['header_dir']), cwd),
+					'gen_dir' : resolve_path(str(env['gen_dir']), cwd),
 					'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env.get('compile_defs', [])},
-					'include_paths' : {cppscript_src, env['header_dir']}.union({str(path) for path in env.get('include_paths', [])}),
+					'include_paths' : {resolve_path(i, cwd) for i in {cppscript_src, str(env['header_dir'])}.union({str(path) for path in env.get('include_paths', [])})},
 					'auto_methods' : env['auto_methods']
 				}
 
 			# Append needed directories
-			scons_env.Append(CPPPATH=[cppscript_src, env['header_dir']])
+			scons_env.Append(CPPPATH=[cppscript_src, resolve_path(env['header_dir'], cwd)])
 			return self.builder(scons_env, source=source, *other, *args, **kwargs)
 
 
@@ -69,6 +69,11 @@ RPC_CONFIG_BODY = """	{{
 # Helpers
 class CppScriptException(Exception):
 	pass
+
+
+def resolve_path(path, cwd):
+	return path if os.path.isabs(path) else os.path.abspath(os.path.join(cwd, path))
+
 
 def filename_to_gen_filename(name, env):
 	return os.path.join(env['gen_dir'], os.path.relpath(name.replace('.hpp', '.gen.cpp'), env['header_dir']))
