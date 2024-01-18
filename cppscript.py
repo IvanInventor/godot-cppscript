@@ -12,8 +12,8 @@ if 'NOT_SCONS' not in os.environ.keys():
 		return env.CppScript(sources, cppscript_env, *args, **kwargs)
 
 	class CppScriptBuilder():
-		def __init__(self, *args, **kwargs):
-			self.builder = Builder(action=generate_header_scons, emitter=generate_header_emitter, *args, **kwargs)
+		def __init__(self):
+			self.builder = Builder(action=generate_header_scons, emitter=generate_header_emitter)
 
 		def __call__(self, scons_env, source, call_args, cwd = os.getcwd(), *args, **kwargs):
 			env, *other = call_args
@@ -24,7 +24,7 @@ if 'NOT_SCONS' not in os.environ.keys():
 					'header_dir' : resolve_path(str(env['header_dir']), cwd),
 					'gen_dir' : resolve_path(str(env['gen_dir']), cwd),
 					'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env.get('compile_defs', [])},
-					'include_paths' : {resolve_path(i, cwd) for i in {cppscript_src, str(env['header_dir'])}.union({str(path) for path in env.get('include_paths', [])})},
+					'include_paths' : {resolve_path(str(i), cwd) for i in [cppscript_src, env['header_dir']] + env.get('include_paths', [])},
 					'auto_methods' : env['auto_methods']
 				}
 
@@ -281,8 +281,7 @@ def parse_header(index, filename, filecontent, env):
 		for cursor in parent.get_children():
 			match cursor.kind:
 				case CursorKind.CXX_METHOD:
-					if cursor.access_specifier == AccessSpecifier.PUBLIC:
-						class_cursors.append(cursor)
+					class_cursors.append(cursor)
 
 				case CursorKind.FIELD_DECL:
 					class_cursors.append(cursor)
@@ -489,7 +488,7 @@ def parse_header(index, filename, filecontent, env):
 				case CursorKind.CXX_METHOD:
 					is_virtual = is_virtual_method(item)
 					properties = {}
-					if process_macros(item, macros, properties, (is_virtual and item.spelling.startswith('_')) or not env['auto_methods']):
+					if process_macros(item, macros, properties, (is_virtual and item.spelling.startswith('_')) or not env['auto_methods'] or item.access_specifier != AccessSpecifier.PUBLIC):
 						properties |= {	'name' : item.spelling,
 								'bind_name' : item.spelling,
 								'return' : item.result_type.spelling,
