@@ -48,5 +48,7 @@ void function(decltype(property) value) {	\
 #define GINIT_LEVEL_SERVERS(...)
 #define GINIT_LEVEL_SCENE(...)
 #define GINIT_LEVEL_EDITOR(...)
+#define GBIND_METHODS_APPEND(...)
+#define GBIND_METHODS_PREPEND(...)
 
 #endif // CPPSCRIPT_HEADER

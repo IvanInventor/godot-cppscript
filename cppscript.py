@@ -351,7 +351,6 @@ def parse_header(index, filename, filecontent, env):
 		child_cursors = [i for i in child_cursors if gdclass_macro.extent.start.offset != i.extent.start.offset]
 
 		group, subgroup = '', ''
-		bind_methods_append, bind_methods_prepend = '', ''
 		start, end = cursor.extent.start.offset, cursor.extent.end.offset
 		class_macros = sorted([m for m in keyword_macros if start < m.extent.start.offset < end] + child_cursors, key=lambda x: x.extent.start.offset)
 
@@ -481,10 +480,10 @@ def parse_header(index, filename, filecontent, env):
 						is_ignored = True
 
 					case 'GBIND_METHODS_APPEND':
-						bind_methods_append += get_macro_body(filecontent, macro)
+						class_defs['bind_methods_append'] += get_macro_body(filecontent, macro)
 
 					case 'GBIND_METHODS_PREPEND':
-						bind_methods_prepend += get_macro_body(filecontent, macro)
+						class_defs['bind_methods_prepend'] += get_macro_body(filecontent, macro)
 
 
 			return not is_ignored
@@ -641,6 +640,8 @@ def write_header(file, defs, env):
 		header_rpc_config = 'void {}::_rpc_config() {{{}}}\n'.format(
 				class_name_full, '\n' + header_rpc_config if header_rpc_config != '' else '')
 		header_bind_methods = '\n\n'.join(i for i in [Hmethod, Hvirtual_method, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '')
+		header_bind_methods = content['bind_methods_append'] + header_bind_methods + content['bind_methods_prepend']
+
 		header_defs += [f'// {class_name_full} : {content["base"]}\n',
 			'void {}::_bind_methods() {{{}}}\n'.format(
 			class_name_full, '\n' + header_bind_methods if header_bind_methods != '' else ''),
