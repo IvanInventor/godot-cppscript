@@ -46,6 +46,7 @@ Install template from [here](https://github.com/IvanInventor/godot-cppscript-tem
 git submodule add https://github.com/IvanInventor/godot-cppscript external/cppscript
 git submodule update --init external/cppscript
 ```
+##### Generate files
 - Copy and modify some files (library_name = 'scripts')
   - By script
     - With cmake
