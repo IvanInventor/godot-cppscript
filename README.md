@@ -2,7 +2,7 @@
 
 # godot-cpp-script
 
-Python script that uses various C++ macros and templates to automate binding code generation and provide short and readable godot-cpp-specific compile error messages. With simple configuration, can attach to existing SCons/CMake build tool. Works similar to [Unreal Header Tool](https://docs.unrealengine.com/5.3/en-US/unreal-header-tool-for-unreal-engine/).
+Python script that uses various C++ macros and templates to automate binding code generation and provide short and readable godot-specific compile error messages. With simple configuration, can attach to existing SCons/CMake build tool. Works similar to [Unreal Header Tool](https://docs.unrealengine.com/5.3/en-US/unreal-header-tool-for-unreal-engine/).
 
 [Example project](https://github.com/IvanInventor/godot-cppscript-example) 
 
@@ -58,8 +58,8 @@ git submodule update --init external/cppscript
     - With Python
     ```bash
     # Usage:
-    # python3 external/cppscript/cppscript-configure.cmake <library_name> <src_dir> <project_dir>
-    python3 external/cppscript/cppscript-configure.cmake scripts src/ project/
+    # python3 external/cppscript/cppscript-configure.py <library_name> <src_dir> <project_dir>
+    python3 external/cppscript/cppscript-configure.py scripts src/ project/
     ```
   	OR
   - By hand, replacing `@LIBRARY_NAME@` in files with you library name
