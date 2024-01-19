@@ -44,7 +44,7 @@ if 'NOT_SCONS' not in os.environ.keys():
 		return found
 
 
-KEYWORDS = ['GPROPERTY', 'GMETHOD', 'GGROUP', 'GSUBGROUP', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE']
+KEYWORDS = ['GPROPERTY', 'GMETHOD', 'GGROUP', 'GSUBGROUP', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE', 'GBIND_METHODS_APPEND', 'GBIND_METHODS_PREPEND']
 INIT_LEVELS = ['GINIT_LEVEL_CORE', 'GINIT_LEVEL_SERVERS', 'GINIT_LEVEL_SCENE', 'GINIT_LEVEL_EDITOR']
 
 DONOTEDIT_MSG = "/*-- GENERATED FILE - DO NOT EDIT --*/\n\n"
@@ -341,7 +341,9 @@ def parse_header(index, filename, filecontent, env):
 			'signals' : [],
 			'enum_constants' : {},
 			'constants' : [],
-			'bitfields' : {}
+			'bitfields' : {},
+			'bind_methods_append' : '',
+			'bind_methods_prepend' : ''
 			}
 		child_cursors = []
 		parse_class(cursor, child_cursors)
@@ -349,6 +351,7 @@ def parse_header(index, filename, filecontent, env):
 		child_cursors = [i for i in child_cursors if gdclass_macro.extent.start.offset != i.extent.start.offset]
 
 		group, subgroup = '', ''
+		bind_methods_append, bind_methods_prepend = '', ''
 		start, end = cursor.extent.start.offset, cursor.extent.end.offset
 		class_macros = sorted([m for m in keyword_macros if start < m.extent.start.offset < end] + child_cursors, key=lambda x: x.extent.start.offset)
 
@@ -477,6 +480,13 @@ def parse_header(index, filename, filecontent, env):
 					case 'GIGNORE':
 						is_ignored = True
 
+					case 'GBIND_METHODS_APPEND':
+						bind_methods_append += get_macro_body(filecontent, macro)
+
+					case 'GBIND_METHODS_PREPEND':
+						bind_methods_prepend += get_macro_body(filecontent, macro)
+
+
 			return not is_ignored
 
 
@@ -524,7 +534,7 @@ def parse_header(index, filename, filecontent, env):
 
 		leftover = collapse_list(class_macros, lambda x: x.kind != CursorKind.MACRO_INSTANTIATION, apply_macros)
 		for macro in leftover:
-			if macro.spelling not in ['GSIGNAL', 'GGROUP', 'GSUBGROUP'] + INIT_LEVELS:
+			if macro.spelling not in ['GSIGNAL', 'GGROUP', 'GSUBGROUP', 'GBIND_METHODS_APPEND', 'GBIND_METHODS_PREPEND'] + INIT_LEVELS:
 				raise CppScriptException('{}:{}:{}: error: macro without target member'
 				.format(filename, macro.location.line, macro.location.column))
 		process_macros(None, leftover, None)
