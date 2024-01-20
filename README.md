@@ -78,7 +78,7 @@ git submodule update --init external/cppscript
 
   # ...
 
-  # Get list of headers (*.hpp only)
+  # Get list of headers (Prefer *.hpp files)
   scripts = GlobRecursive('src', '*.hpp')
   
   # Create target, returns generated .cpp files list
@@ -143,7 +143,7 @@ git submodule update --init external/cppscript
   list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/cppscript")
   include(godot-cppscript)
   
-  # Get header files (.hpp only)
+  # Get header files (Prefer .hpp files)
   file(GLOB_RECURSE CPPSCRIPT_HEADERS src/*.hpp)
   
   # Call function to configure your target

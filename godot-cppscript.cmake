@@ -21,7 +21,7 @@ function(create_cppscript_target TARGET_NAME HEADERS_LIST HEADER_NAME HEADERS_DI
 
 	foreach(PATH ${HEADERS_LIST})
 		file(RELATIVE_PATH PATH "${HEADERS_DIR}" "${PATH}")
-		string(REGEX REPLACE "\.hpp$" ".gen.cpp" relative_path "${PATH}")
+		string(REGEX REPLACE "\.[^./\\]+$" ".gen.cpp" relative_path "${PATH}")
 		list(APPEND SOURCES_LIST "${GEN_DIR}/${relative_path}")
 	endforeach()
 

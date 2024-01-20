@@ -71,12 +71,20 @@ class CppScriptException(Exception):
 	pass
 
 
+def replace_extension(filename, new_ext):
+	idx = filename.rfind('.')
+	if idx == -1:
+		return filename + new_ext
+	else:
+		return filename[:idx] + new_ext
+
+
 def resolve_path(path, cwd):
 	return path if os.path.isabs(path) else os.path.abspath(os.path.join(cwd, path))
 
 
 def filename_to_gen_filename(name, env):
-	return os.path.join(env['gen_dir'], os.path.relpath(name.replace('.hpp', '.gen.cpp'), env['header_dir']))
+	return os.path.join(env['gen_dir'], os.path.relpath(replace_extension(name, '.gen.cpp'), env['header_dir']))
 
 
 def collapse_list(list, key, action):
@@ -270,7 +278,7 @@ def generate_header(source, env, get_file):
 	return 0
 
 def parse_header(index, filename, filecontent, env):
-	translation_unit = index.parse(filename, args=env['parser_args'], unsaved_files=[(filename, filecontent)], options=TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+	translation_unit = index.parse(filename, args=env['parser_args'] + ['-x', 'c++'], unsaved_files=[(filename, filecontent)], options=TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
 		raise CppScriptException("{filename}: failed to create translation unit")
