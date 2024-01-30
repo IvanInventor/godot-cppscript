@@ -332,16 +332,16 @@ def parse_header(index, filename, filecontent, env):
 
 
 		for macro in macros:
-			classes.append((cursor, get_macro_args(filecontent, macro)[1], macro))
+			classes.append((cursor, macro))
 
 
 	collapse_list(found_class, lambda x: x.kind == CursorKind.CLASS_DECL, add_class)
 
 	parsed_classes = {}
-	for cursor, base, gdclass_macro in classes:
+	for cursor, gdclass_macro in classes:
 		class_defs = {
 			'class_name' : cursor.spelling,
-			'base' : base,
+			'base' : get_macro_args(filecontent, gdclass_macro)[1],
 			'type' : gdclass_macro.spelling[1:],
 			'init_level' : 'SCENE',
 			'methods' : [],
