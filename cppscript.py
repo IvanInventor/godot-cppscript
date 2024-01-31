@@ -70,7 +70,8 @@ TARGETLESS_KEYWORDS = [
 	'GBIND_METHODS_APPEND',
 	'GBIND_METHODS_PREPEND',
 	'GRESOURCE_LOADER',
-	'GRESOURCE_SAVER'
+	'GRESOURCE_SAVER',
+	'GEDITOR_PLUGIN'
 ] + INIT_LEVELS
 
 ALL_KEYWORDS = KEYWORDS + TARGETLESS_KEYWORDS
@@ -525,6 +526,11 @@ def parse_header(index, filename, filecontent, env):
 					case 'GRESOURCE_SAVER':
 						class_defs['is_resource_saver'] = True
 
+					case 'GEDITOR_PLUGIN':
+						class_defs['init_level'] = 'EDITOR'
+						class_defs['is_editor_plugin'] = True
+
+
 
 			return not is_ignored
 
@@ -734,12 +740,16 @@ def write_register_header(defs_all, env):
 			loaders_savers.append(f'extern Ref<{class_name_full}> {variable_name};')
 			register_str += f'\t{variable_name}.instantiate();\n\tResourceLoader::get_singleton()->add_resource_format_loader({variable_name});\n'
 			unregister_str += f'\tResourceLoader::get_singleton()->remove_resource_format_loader({variable_name});\n\t{variable_name}.unref();\n'
+
 		elif 'is_resource_saver' in content:
 			variable_name = f'{content["class_name"]}_saver'
 
 			loaders_savers.append(f'extern Ref<{class_name_full}> {variable_name};\n')
 			register_str += f'\t{variable_name}.instantiate();\n\tResourceSaver::get_singleton()->add_resource_format_saver({variable_name});\n'
 			unregister_str += f'\tResourceSaver::get_singleton()->remove_resource_format_saver({variable_name});\n\t{variable_name}.unref();\n'
+
+		elif 'is_editor_plugin' in content:
+			register_str += f'\tEditorPlugins::add_by_type<{class_name_full}>();\n'
 
 		return register_str, unregister_str
 
@@ -768,7 +778,7 @@ def write_register_header(defs_all, env):
 	if loaders_savers != []:
 		scripts_header += '#include <godot_cpp/classes/resource_loader.hpp>\n'
 		scripts_header += '#include <godot_cpp/classes/resource_saver.hpp>\n'
-
+	
 	classes_register_str = ''
 	if classes_register_levels['CORE'] != []:
 		minimal_register_level = 'MODULE_INITIALIZATION_LEVEL_CORE'

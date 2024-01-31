@@ -49,5 +49,6 @@ void function(decltype(property) value) {	\
 #define GBIND_METHODS_PREPEND(...)
 #define GRESOURCE_LOADER(...)
 #define GRESOURCE_SAVER(...)
+#define GEDITOR_PLUGIN(...)
 
 #endif // CPPSCRIPT_HEADER
