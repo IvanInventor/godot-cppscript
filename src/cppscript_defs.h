@@ -50,5 +50,7 @@ void function(decltype(property) value) {	\
 #define GINIT_LEVEL_EDITOR(...)
 #define GBIND_METHODS_APPEND(...)
 #define GBIND_METHODS_PREPEND(...)
+#define GRESOURCE_LOADER(...)
+#define GRESOURCE_SAVER(...)
 
 #endif // CPPSCRIPT_HEADER
