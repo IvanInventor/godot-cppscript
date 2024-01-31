@@ -20,12 +20,12 @@ if 'NOT_SCONS' not in os.environ.keys():
 			cppscript_src = os.path.join(os.path.dirname(__file__), 'src')
 			# Convert scons variables to cppscript's env
 			scons_env['cppscript_env'] = {
-					'header_name' : env['header_name'],
-					'header_dir' : resolve_path(str(env['header_dir']), cwd),
-					'gen_dir' : resolve_path(str(env['gen_dir']), cwd),
-					'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env.get('compile_defs', [])},
-					'include_paths' : {resolve_path(str(i), cwd) for i in [cppscript_src, env['header_dir']] + env.get('include_paths', [])},
-					'auto_methods' : env['auto_methods']
+				'header_name' : env['header_name'],
+				'header_dir' : resolve_path(str(env['header_dir']), cwd),
+				'gen_dir' : resolve_path(str(env['gen_dir']), cwd),
+				'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env.get('compile_defs', [])},
+				'include_paths' : {resolve_path(str(i), cwd) for i in [cppscript_src, env['header_dir']] + env.get('include_paths', [])},
+				'auto_methods' : env['auto_methods']
 				}
 
 			# Append needed directories
@@ -43,13 +43,41 @@ if 'NOT_SCONS' not in os.environ.keys():
 
 		return found
 
+CLASS_KEYWORDS = [
+	'GCLASS',
+	'GVIRTUAL_CLASS',
+	'GABSTRACT_CLASS',
+	'GINTERNAL_CLASS'
+]
+INIT_LEVELS = [
+	'GINIT_LEVEL_CORE',
+	'GINIT_LEVEL_SERVERS',
+	'GINIT_LEVEL_SCENE',
+	'GINIT_LEVEL_EDITOR'
+]
+KEYWORDS = [
+	'GPROPERTY',
+	'GMETHOD',
+	'GBITFIELD',
+	'GRPC',
+	'GVARARG',
+	'GIGNORE'
+]
+TARGETLESS_KEYWORDS = [
+	'GGROUP',
+	'GSUBGROUP',
+	'GSIGNAL',
+	'GBIND_METHODS_APPEND',
+	'GBIND_METHODS_PREPEND',
+	'GRESOURCE_LOADER',
+	'GRESOURCE_SAVER'
+] + INIT_LEVELS
 
-KEYWORDS = ['GPROPERTY', 'GMETHOD', 'GGROUP', 'GSUBGROUP', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE', 'GBIND_METHODS_APPEND', 'GBIND_METHODS_PREPEND', 'GRESOURCE_LOADER', 'GRESOURCE_SAVER']
-INIT_LEVELS = ['GINIT_LEVEL_CORE', 'GINIT_LEVEL_SERVERS', 'GINIT_LEVEL_SCENE', 'GINIT_LEVEL_EDITOR']
+ALL_KEYWORDS = KEYWORDS + TARGETLESS_KEYWORDS
 
 DONOTEDIT_MSG = "/*-- GENERATED FILE - DO NOT EDIT --*/\n\n"
 
-CPPSCRIPT_BODY= DONOTEDIT_MSG + """#ifndef {0}
+CPPSCRIPT_BODY = DONOTEDIT_MSG + """#ifndef {0}
 #define {0}
 #include <cppscript_defs.h>
 #include "properties.gen.h"
@@ -309,13 +337,10 @@ def parse_header(index, filename, filecontent, env):
 					classes_and_Gmacros.append(cursor)
 
 				case CursorKind.MACRO_INSTANTIATION:
-					if cursor.spelling in KEYWORDS:
+					if cursor.spelling in ALL_KEYWORDS:
 						keyword_macros.append(cursor)
 
-					elif cursor.spelling in INIT_LEVELS:
-						keyword_macros.append(cursor)
-
-					elif cursor.spelling in ['GCLASS', 'GVIRTUAL_CLASS', 'GABSTRACT_CLASS', 'GINTERNAL_CLASS']:
+					elif cursor.spelling in CLASS_KEYWORDS:
 						classes_and_Gmacros.append(cursor)
 
 				case _:
@@ -388,11 +413,11 @@ def parse_header(index, filename, filecontent, env):
 							.format(filename, macro.location.line, macro.location.column, macro.spelling))
 
 						properties |= {
-								'setter' : args[0],
-								'getter' : args[1],
-								'hint' : 'PROPERTY_HINT_' + args[2].upper() if len(args) > 2 else None,
-								'hint_string' : args[3] if len(args) > 3 else '""'
-								}
+							'setter' : args[0],
+							'getter' : args[1],
+							'hint' : 'PROPERTY_HINT_' + args[2].upper() if len(args) > 2 else None,
+							'hint_string' : args[3] if len(args) > 3 else '""'
+							}
 						is_ignored = False
 
 					case 'GGROUP':
@@ -469,11 +494,12 @@ def parse_header(index, filename, filecontent, env):
 
 									channel = arg
 
-
-						rpc_config = {	'rpc_mode' : 'RPC_MODE_' + rpc_mode if rpc_mode != None else 'RPC_MODE_AUTHORITY',
-								'transfer_mode' : 'TRANSFER_MODE_' + transfer_mode if transfer_mode != None else 'TRANSFER_MODE_UNRELIABLE',
-		    						'call_local' : call_local if call_local != None else 'false',
-		    						'channel' : channel if channel != None else '0'}
+						rpc_config = {
+							'rpc_mode' : 'RPC_MODE_' + rpc_mode if rpc_mode != None else 'RPC_MODE_AUTHORITY',
+							'transfer_mode' : 'TRANSFER_MODE_' + transfer_mode if transfer_mode != None else 'TRANSFER_MODE_UNRELIABLE',
+							'call_local' : call_local if call_local != None else 'false',
+							'channel' : channel if channel != None else '0'
+							}
 
 						properties['rpc_config'] = rpc_config 
 
@@ -512,13 +538,14 @@ def parse_header(index, filename, filecontent, env):
 					is_virtual = is_virtual_method(item)
 					properties = {}
 					if process_macros(item, macros, properties, (is_virtual and item.spelling.startswith('_')) or not env['auto_methods'] or item.access_specifier != AccessSpecifier.PUBLIC):
-						properties |= {	'name' : item.spelling,
-								'bind_name' : item.spelling,
-								'return' : item.result_type.spelling,
-								'args' : [(arg.type.spelling, arg.spelling, find_default_arg(filecontent, arg)) for arg in item.get_arguments()],
-								'is_static' : item.is_static_method(),
-								'is_virtual' : is_virtual
-								}
+						properties |= {
+							'name' : item.spelling,
+							'bind_name' : item.spelling,
+							'return' : item.result_type.spelling,
+							'args' : [(arg.type.spelling, arg.spelling, find_default_arg(filecontent, arg)) for arg in item.get_arguments()],
+							'is_static' : item.is_static_method(),
+							'is_virtual' : is_virtual
+							}
 						class_defs['methods'].append(properties)
 
 				case CursorKind.ENUM_DECL:
@@ -535,11 +562,12 @@ def parse_header(index, filename, filecontent, env):
 				case CursorKind.FIELD_DECL:
 					properties = {}
 					if process_macros(item, macros, properties, True):
-						properties |= { 'name': item.spelling,
-								'group' : group,
-								'subgroup' : subgroup,
-								'is_static' : item.is_static_method()
-								}
+						properties |= {
+							'name': item.spelling,
+							'group' : group,
+							'subgroup' : subgroup,
+							'is_static' : item.is_static_method()
+							}
 
 						class_defs['properties'].append(properties)
 
@@ -547,9 +575,9 @@ def parse_header(index, filename, filecontent, env):
 
 		leftover = collapse_list(class_macros, lambda x: x.kind != CursorKind.MACRO_INSTANTIATION, apply_macros)
 		for macro in leftover:
-			if macro.spelling not in ['GSIGNAL', 'GGROUP', 'GSUBGROUP', 'GBIND_METHODS_APPEND', 'GBIND_METHODS_PREPEND', 'GRESOURCE_LOADER', 'GRESOURCE_SAVER'] + INIT_LEVELS:
-				raise CppScriptException('{}:{}:{}: error: macro without target member'
-				.format(filename, macro.location.line, macro.location.column))
+			if macro.spelling not in TARGETLESS_KEYWORDS:
+				raise CppScriptException('{}:{}:{}: error: macro "{}" without target member'
+				.format(filename, macro.location.line, macro.location.column, macro.spelling))
 		process_macros(None, leftover, None)
 
 
@@ -571,11 +599,10 @@ def write_header(file, defs, env):
 	for class_name_full, content in defs.items():
 		class_name = content['class_name']
 		Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', ''
-		outside_bind = ''
-		header_rpc_config = ''
+		outside_bind, header_rpc_config, property_set_get_defs = '', '', ''
 		gen_setters, gen_getters = [], []
-		property_set_get_defs = ''
 		methods_list = [method['bind_name'] for method in content['methods']]
+		has_rpc_config = False
 
 		for method in content['methods']:
 			if 'varargs' not in method.keys():
@@ -593,6 +620,7 @@ def write_header(file, defs, env):
 					Hmethod += f'\tMethod<&{class_name}::{method["name"]}>::bind(D_METHOD("{method["bind_name"]}"{args}){defvals});\n'
 
 				if 'rpc_config' in method.keys():
+					has_rpc_config = True
 					header_rpc_config += RPC_CONFIG_BODY.format(
 						method['rpc_config']['rpc_mode'],
 						method['rpc_config']['transfer_mode'],
@@ -678,6 +706,11 @@ def write_header(file, defs, env):
 				.format(
 					os.path.relpath(file, os.path.dirname(gen_filename)).replace('\\', '/'),
 					('\n'.join(global_variables) + '\n\n' if global_variables != [] else ''))
+
+		if has_rpc_config != '':
+			header_include = '#include <godot_cpp/classes/multiplayer_api.hpp>\n' + header_include
+			header_include = '#include <godot_cpp/classes/multiplayer_peer.hpp>\n' + header_include
+
 		content = DONOTEDIT_MSG + header_include + '\n'.join(header_defs)
 
 	os.makedirs(os.path.dirname(gen_filename), exist_ok=True)

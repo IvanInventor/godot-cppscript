@@ -1,8 +1,5 @@
 #ifndef CPPSCRIPT_HEADER
 #define CPPSCRIPT_HEADER
-#include <godot_cpp/classes/multiplayer_api.hpp>
-#include <godot_cpp/classes/multiplayer_peer.hpp>
-
 
 #define GCLASS(CLASS_NAME, CLASS_NAME_INH) 								\
 	GDCLASS(CLASS_NAME , CLASS_NAME_INH)								\
