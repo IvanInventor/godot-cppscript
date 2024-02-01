@@ -36,15 +36,19 @@ void initialize_@LIBRARY_NAME@_module(ModuleInitializationLevel p_level) {
 void uninitialize_@LIBRARY_NAME@_module(ModuleInitializationLevel p_level) {
 	switch (p_level) {
 		case MODULE_INITIALIZATION_LEVEL_CORE:
+			_unregister_level_core();
 			break;
 		case MODULE_INITIALIZATION_LEVEL_SERVERS:
+			_unregister_level_servers();
 			break;
 		case MODULE_INITIALIZATION_LEVEL_SCENE:
 			// Non-cppscript classes, static/global variables
 			// deinitialization here
 
+			_unregister_level_scene();
 			break;
 		case MODULE_INITIALIZATION_LEVEL_EDITOR:
+			_unregister_level_editor();
 			break;
 		default:
 			break;

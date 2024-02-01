@@ -1,8 +1,5 @@
 #ifndef CPPSCRIPT_HEADER
 #define CPPSCRIPT_HEADER
-#include <godot_cpp/classes/multiplayer_api.hpp>
-#include <godot_cpp/classes/multiplayer_peer.hpp>
-
 
 #define GCLASS(CLASS_NAME, CLASS_NAME_INH) 								\
 	GDCLASS(CLASS_NAME , CLASS_NAME_INH)								\
@@ -48,5 +45,11 @@ void function(decltype(property) value) {	\
 #define GINIT_LEVEL_SERVERS(...)
 #define GINIT_LEVEL_SCENE(...)
 #define GINIT_LEVEL_EDITOR(...)
+#define GBIND_METHODS_APPEND(...)
+#define GBIND_METHODS_PREPEND(...)
+#define GRESOURCE_LOADER(...)
+#define GRESOURCE_SAVER(...)
+#define GEDITOR_PLUGIN(...)
+#define GSINGLETON(...);
 
 #endif // CPPSCRIPT_HEADER

@@ -20,12 +20,12 @@ if 'NOT_SCONS' not in os.environ.keys():
 			cppscript_src = os.path.join(os.path.dirname(__file__), 'src')
 			# Convert scons variables to cppscript's env
 			scons_env['cppscript_env'] = {
-					'header_name' : env['header_name'],
-					'header_dir' : resolve_path(str(env['header_dir']), cwd),
-					'gen_dir' : resolve_path(str(env['gen_dir']), cwd),
-					'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env.get('compile_defs', [])},
-					'include_paths' : {resolve_path(str(i), cwd) for i in [cppscript_src, env['header_dir']] + env.get('include_paths', [])},
-					'auto_methods' : env['auto_methods']
+				'header_name' : env['header_name'],
+				'header_dir' : resolve_path(str(env['header_dir']), cwd),
+				'gen_dir' : resolve_path(str(env['gen_dir']), cwd),
+				'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env.get('compile_defs', [])},
+				'include_paths' : {resolve_path(str(i), cwd) for i in [cppscript_src, env['header_dir']] + env.get('include_paths', [])},
+				'auto_methods' : env['auto_methods']
 				}
 
 			# Append needed directories
@@ -43,13 +43,43 @@ if 'NOT_SCONS' not in os.environ.keys():
 
 		return found
 
+CLASS_KEYWORDS = [
+	'GCLASS',
+	'GVIRTUAL_CLASS',
+	'GABSTRACT_CLASS',
+	'GINTERNAL_CLASS'
+]
+INIT_LEVELS = [
+	'GINIT_LEVEL_CORE',
+	'GINIT_LEVEL_SERVERS',
+	'GINIT_LEVEL_SCENE',
+	'GINIT_LEVEL_EDITOR'
+]
+KEYWORDS = [
+	'GPROPERTY',
+	'GMETHOD',
+	'GBITFIELD',
+	'GRPC',
+	'GVARARG',
+	'GIGNORE'
+]
+TARGETLESS_KEYWORDS = [
+	'GGROUP',
+	'GSUBGROUP',
+	'GSIGNAL',
+	'GBIND_METHODS_APPEND',
+	'GBIND_METHODS_PREPEND',
+	'GRESOURCE_LOADER',
+	'GRESOURCE_SAVER',
+	'GEDITOR_PLUGIN',
+	'GSINGLETON'
+] + INIT_LEVELS
 
-KEYWORDS = ['GPROPERTY', 'GMETHOD', 'GGROUP', 'GSUBGROUP', 'GBITFIELD', 'GSIGNAL', 'GRPC', 'GVARARG', 'GIGNORE']
-INIT_LEVELS = ['GINIT_LEVEL_CORE', 'GINIT_LEVEL_SERVERS', 'GINIT_LEVEL_SCENE', 'GINIT_LEVEL_EDITOR']
+ALL_KEYWORDS = KEYWORDS + TARGETLESS_KEYWORDS
 
 DONOTEDIT_MSG = "/*-- GENERATED FILE - DO NOT EDIT --*/\n\n"
 
-CPPSCRIPT_BODY= DONOTEDIT_MSG + """#ifndef {0}
+CPPSCRIPT_BODY = DONOTEDIT_MSG + """#ifndef {0}
 #define {0}
 #include <cppscript_defs.h>
 #include "properties.gen.h"
@@ -71,12 +101,20 @@ class CppScriptException(Exception):
 	pass
 
 
+def replace_extension(filename, new_ext):
+	idx = filename.rfind('.')
+	if idx == -1:
+		return filename + new_ext
+	else:
+		return filename[:idx] + new_ext
+
+
 def resolve_path(path, cwd):
 	return path if os.path.isabs(path) else os.path.abspath(os.path.join(cwd, path))
 
 
 def filename_to_gen_filename(name, env):
-	return os.path.join(env['gen_dir'], os.path.relpath(name.replace('.hpp', '.gen.cpp'), env['header_dir']))
+	return os.path.join(env['gen_dir'], os.path.relpath(replace_extension(name, '.gen.cpp'), env['header_dir']))
 
 
 def collapse_list(list, key, action):
@@ -270,7 +308,7 @@ def generate_header(source, env, get_file):
 	return 0
 
 def parse_header(index, filename, filecontent, env):
-	translation_unit = index.parse(filename, args=env['parser_args'], unsaved_files=[(filename, filecontent)], options=TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
+	translation_unit = index.parse(filename, args=env['parser_args'] + ['-x', 'c++'], unsaved_files=[(filename, filecontent)], options=TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
 
 	if not translation_unit:
 		raise CppScriptException("{filename}: failed to create translation unit")
@@ -301,13 +339,10 @@ def parse_header(index, filename, filecontent, env):
 					classes_and_Gmacros.append(cursor)
 
 				case CursorKind.MACRO_INSTANTIATION:
-					if cursor.spelling in KEYWORDS:
+					if cursor.spelling in ALL_KEYWORDS:
 						keyword_macros.append(cursor)
 
-					elif cursor.spelling in INIT_LEVELS:
-						keyword_macros.append(cursor)
-
-					elif cursor.spelling in ['GCLASS', 'GVIRTUAL_CLASS', 'GABSTRACT_CLASS', 'GINTERNAL_CLASS']:
+					elif cursor.spelling in CLASS_KEYWORDS:
 						classes_and_Gmacros.append(cursor)
 
 				case _:
@@ -324,16 +359,16 @@ def parse_header(index, filename, filecontent, env):
 
 
 		for macro in macros:
-			classes.append((cursor, get_macro_args(filecontent, macro)[1], macro))
+			classes.append((cursor, macro))
 
 
 	collapse_list(found_class, lambda x: x.kind == CursorKind.CLASS_DECL, add_class)
 
 	parsed_classes = {}
-	for cursor, base, gdclass_macro in classes:
+	for cursor, gdclass_macro in classes:
 		class_defs = {
 			'class_name' : cursor.spelling,
-			'base' : base,
+			'base' : get_macro_args(filecontent, gdclass_macro)[1],
 			'type' : gdclass_macro.spelling[1:],
 			'init_level' : 'SCENE',
 			'methods' : [],
@@ -341,7 +376,9 @@ def parse_header(index, filename, filecontent, env):
 			'signals' : [],
 			'enum_constants' : {},
 			'constants' : [],
-			'bitfields' : {}
+			'bitfields' : {},
+			'bind_methods_append' : '',
+			'bind_methods_prepend' : ''
 			}
 		child_cursors = []
 		parse_class(cursor, child_cursors)
@@ -378,11 +415,11 @@ def parse_header(index, filename, filecontent, env):
 							.format(filename, macro.location.line, macro.location.column, macro.spelling))
 
 						properties |= {
-								'setter' : args[0],
-								'getter' : args[1],
-								'hint' : 'PROPERTY_HINT_' + args[2].upper() if len(args) > 2 else None,
-								'hint_string' : args[3] if len(args) > 3 else '""'
-								}
+							'setter' : args[0],
+							'getter' : args[1],
+							'hint' : 'PROPERTY_HINT_' + args[2].upper() if len(args) > 2 else None,
+							'hint_string' : args[3] if len(args) > 3 else '""'
+							}
 						is_ignored = False
 
 					case 'GGROUP':
@@ -459,11 +496,12 @@ def parse_header(index, filename, filecontent, env):
 
 									channel = arg
 
-
-						rpc_config = {	'rpc_mode' : 'RPC_MODE_' + rpc_mode if rpc_mode != None else 'RPC_MODE_AUTHORITY',
-								'transfer_mode' : 'TRANSFER_MODE_' + transfer_mode if transfer_mode != None else 'TRANSFER_MODE_UNRELIABLE',
-		    						'call_local' : call_local if call_local != None else 'false',
-		    						'channel' : channel if channel != None else '0'}
+						rpc_config = {
+							'rpc_mode' : 'RPC_MODE_' + rpc_mode if rpc_mode != None else 'RPC_MODE_AUTHORITY',
+							'transfer_mode' : 'TRANSFER_MODE_' + transfer_mode if transfer_mode != None else 'TRANSFER_MODE_UNRELIABLE',
+							'call_local' : call_local if call_local != None else 'false',
+							'channel' : channel if channel != None else '0'
+							}
 
 						properties['rpc_config'] = rpc_config 
 
@@ -477,6 +515,26 @@ def parse_header(index, filename, filecontent, env):
 					case 'GIGNORE':
 						is_ignored = True
 
+					case 'GBIND_METHODS_APPEND':
+						class_defs['bind_methods_append'] += '\n' + get_macro_body(filecontent, macro) + '\n'
+
+					case 'GBIND_METHODS_PREPEND':
+						class_defs['bind_methods_prepend'] += '\n' + get_macro_body(filecontent, macro) + '\n'
+
+					case 'GRESOURCE_LOADER':
+						class_defs['is_resource_loader'] = True
+
+					case 'GRESOURCE_SAVER':
+						class_defs['is_resource_saver'] = True
+
+					case 'GEDITOR_PLUGIN':
+						class_defs['init_level'] = 'EDITOR'
+						class_defs['is_editor_plugin'] = True
+
+					case 'GSINGLETON':
+						class_defs['is_singleton'] = True
+
+
 			return not is_ignored
 
 
@@ -489,13 +547,14 @@ def parse_header(index, filename, filecontent, env):
 					is_virtual = is_virtual_method(item)
 					properties = {}
 					if process_macros(item, macros, properties, (is_virtual and item.spelling.startswith('_')) or not env['auto_methods'] or item.access_specifier != AccessSpecifier.PUBLIC):
-						properties |= {	'name' : item.spelling,
-								'bind_name' : item.spelling,
-								'return' : item.result_type.spelling,
-								'args' : [(arg.type.spelling, arg.spelling, find_default_arg(filecontent, arg)) for arg in item.get_arguments()],
-								'is_static' : item.is_static_method(),
-								'is_virtual' : is_virtual
-								}
+						properties |= {
+							'name' : item.spelling,
+							'bind_name' : item.spelling,
+							'return' : item.result_type.spelling,
+							'args' : [(arg.type.spelling, arg.spelling, find_default_arg(filecontent, arg)) for arg in item.get_arguments()],
+							'is_static' : item.is_static_method(),
+							'is_virtual' : is_virtual
+							}
 						class_defs['methods'].append(properties)
 
 				case CursorKind.ENUM_DECL:
@@ -512,11 +571,12 @@ def parse_header(index, filename, filecontent, env):
 				case CursorKind.FIELD_DECL:
 					properties = {}
 					if process_macros(item, macros, properties, True):
-						properties |= { 'name': item.spelling,
-								'group' : group,
-								'subgroup' : subgroup,
-								'is_static' : item.is_static_method()
-								}
+						properties |= {
+							'name': item.spelling,
+							'group' : group,
+							'subgroup' : subgroup,
+							'is_static' : item.is_static_method()
+							}
 
 						class_defs['properties'].append(properties)
 
@@ -524,9 +584,9 @@ def parse_header(index, filename, filecontent, env):
 
 		leftover = collapse_list(class_macros, lambda x: x.kind != CursorKind.MACRO_INSTANTIATION, apply_macros)
 		for macro in leftover:
-			if macro.spelling not in ['GSIGNAL', 'GGROUP', 'GSUBGROUP'] + INIT_LEVELS:
-				raise CppScriptException('{}:{}:{}: error: macro without target member'
-				.format(filename, macro.location.line, macro.location.column))
+			if macro.spelling not in TARGETLESS_KEYWORDS:
+				raise CppScriptException('{}:{}:{}: error: macro "{}" without target member'
+				.format(filename, macro.location.line, macro.location.column, macro.spelling))
 		process_macros(None, leftover, None)
 
 
@@ -544,14 +604,14 @@ def parse_and_write_header(index, filename, filecontent, env):
 
 def write_header(file, defs, env):
 	header_defs = []
+	global_variables = []
 	for class_name_full, content in defs.items():
 		class_name = content['class_name']
 		Hmethod, Hstatic_method, Hvirtual_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst = '', '', '', '', '', '', '', '', ''
-		outside_bind = ''
-		header_rpc_config = ''
+		outside_bind, header_rpc_config, property_set_get_defs = '', '', ''
 		gen_setters, gen_getters = [], []
-		property_set_get_defs = ''
 		methods_list = [method['bind_name'] for method in content['methods']]
+		has_rpc_config = False
 
 		for method in content['methods']:
 			if 'varargs' not in method.keys():
@@ -569,6 +629,7 @@ def write_header(file, defs, env):
 					Hmethod += f'\tMethod<&{class_name}::{method["name"]}>::bind(D_METHOD("{method["bind_name"]}"{args}){defvals});\n'
 
 				if 'rpc_config' in method.keys():
+					has_rpc_config = True
 					header_rpc_config += RPC_CONFIG_BODY.format(
 						method['rpc_config']['rpc_mode'],
 						method['rpc_config']['transfer_mode'],
@@ -628,9 +689,18 @@ def write_header(file, defs, env):
 		for const in content['constants']:
 			Hconst += f'\tBIND_CONSTANT({const});\n'
 
+		if 'is_resource_loader' in content:
+			variable_name = content["class_name"] + '_loader'
+			global_variables.append(f'Ref<{class_name_full}> {variable_name};')
+		elif 'is_resource_saver' in content:
+			variable_name = content["class_name"] + '_saver'
+			global_variables.append(f'Ref<{class_name_full}> {variable_name};')
+
 		header_rpc_config = 'void {}::_rpc_config() {{{}}}\n'.format(
 				class_name_full, '\n' + header_rpc_config if header_rpc_config != '' else '')
 		header_bind_methods = '\n\n'.join(i for i in [Hmethod, Hvirtual_method, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '')
+		header_bind_methods = content['bind_methods_prepend'] + header_bind_methods + content['bind_methods_append']
+
 		header_defs += [f'// {class_name_full} : {content["base"]}\n',
 			'void {}::_bind_methods() {{{}}}\n'.format(
 			class_name_full, '\n' + header_bind_methods if header_bind_methods != '' else ''),
@@ -641,7 +711,15 @@ def write_header(file, defs, env):
 	gen_filename = filename_to_gen_filename(file, env)
 	content = ''
 	if len(defs) != 0:
-		header_include = '#include <cppscript_bindings.h>\n\n#include "{}"\n\nusing namespace godot;\n\n'.format(os.path.relpath(file, os.path.dirname(gen_filename)).replace('\\', '/'))
+		header_include = '#include <cppscript_bindings.h>\n\n#include "{}"\n\nusing namespace godot;\n\n{}' \
+				.format(
+					os.path.relpath(file, os.path.dirname(gen_filename)).replace('\\', '/'),
+					('\n'.join(global_variables) + '\n\n' if global_variables != [] else ''))
+
+		if has_rpc_config != '':
+			header_include = '#include <godot_cpp/classes/multiplayer_api.hpp>\n' + header_include
+			header_include = '#include <godot_cpp/classes/multiplayer_peer.hpp>\n' + header_include
+
 		content = DONOTEDIT_MSG + header_include + '\n'.join(header_defs)
 
 	os.makedirs(os.path.dirname(gen_filename), exist_ok=True)
@@ -654,12 +732,44 @@ def write_register_header(defs_all, env):
 	scripts_header = DONOTEDIT_MSG
 	classes_register_levels = {name[12:] : [] for name in INIT_LEVELS}
 
+	loaders_savers = []
+	has_singleton = False
+	def make_register_str_pair(class_name_full, content):
+		register_str = f"\tGDREGISTER_{content['type']}({class_name_full});\n"
+		unregister_str = ''
+
+		if 'is_resource_loader' in content:
+			variable_name = f'{content["class_name"]}_loader'
+
+			loaders_savers.append(f'extern Ref<{class_name_full}> {variable_name};')
+			register_str += f'\t{variable_name}.instantiate();\n\tResourceLoader::get_singleton()->add_resource_format_loader({variable_name});\n'
+			unregister_str += f'\tResourceLoader::get_singleton()->remove_resource_format_loader({variable_name});\n\t{variable_name}.unref();\n'
+
+		elif 'is_resource_saver' in content:
+			variable_name = f'{content["class_name"]}_saver'
+
+			loaders_savers.append(f'extern Ref<{class_name_full}> {variable_name};\n')
+			register_str += f'\t{variable_name}.instantiate();\n\tResourceSaver::get_singleton()->add_resource_format_saver({variable_name});\n'
+			unregister_str += f'\tResourceSaver::get_singleton()->remove_resource_format_saver({variable_name});\n\t{variable_name}.unref();\n'
+
+		elif 'is_editor_plugin' in content:
+			register_str += f'\tEditorPlugins::add_by_type<{class_name_full}>();\n'
+
+		elif 'is_singleton' in content:
+			nonlocal has_singleton
+			has_singleton = True
+			register_str += f'\tEngine::get_singleton()->register_singleton("{content["class_name"]}", memnew({class_name_full}));\n'
+			unregister_str += f'\tEngine::get_singleton()->unregister_singleton("{content["class_name"]}");\n\tmemdelete({class_name_full}::get_singleton());\n'
+
+		return register_str, unregister_str
+
 	for file, filecontent in defs_all['files'].items():
 		classes = filecontent['content']
 		if len(classes) == 0:
 			continue
 
 		scripts_header += '#include "{}"\n'.format(os.path.relpath(file, os.path.dirname(target)).replace('\\', '/'))
+
 		for class_name_full, content in classes.items():
 			# Ensure parent classes are registered before children
 			# by iterating throught pairs of (base_name, register_str)
@@ -669,11 +779,18 @@ def write_register_header(defs_all, env):
 			base = base if dots == -1 else base[dots+1:]
 			for i in range(len(classes_register)):
 				if class_name == classes_register[i][0]:
-					classes_register.insert(i, (base, f"\tGDREGISTER_{content['type']}({class_name_full});\n"))
+					classes_register.insert(i, (base, make_register_str_pair(class_name_full, content)))
 					break
 			else:
-				classes_register.append((base, f"\tGDREGISTER_{content['type']}({class_name_full});\n"))
+				classes_register.append((base, make_register_str_pair(class_name_full, content)))
 
+
+	if loaders_savers != []:
+		scripts_header += '#include <godot_cpp/classes/resource_loader.hpp>\n'
+		scripts_header += '#include <godot_cpp/classes/resource_saver.hpp>\n'
+
+	if has_singleton:
+		scripts_header += '#include <godot_cpp/classes/engine.hpp>\n'
 
 	classes_register_str = ''
 	if classes_register_levels['CORE'] != []:
@@ -684,11 +801,18 @@ def write_register_header(defs_all, env):
 		minimal_register_level = 'MODULE_INITIALIZATION_LEVEL_SCENE'
 
 	scripts_header += '\nusing namespace godot;\n\n' + \
-			f'static const ModuleInitializationLevel DEFAULT_INIT_LEVEL = {minimal_register_level};\n\n'
+			f'static const ModuleInitializationLevel DEFAULT_INIT_LEVEL = {minimal_register_level};\n\n' + \
+			('\n'.join(loaders_savers) + '\n\n' if loaders_savers != [] else '')
+
 	for level_name, defs in classes_register_levels.items():
-		registers = ''.join(i for _, i in defs)
+		registers = ''.join(i[0] for _, i in defs)
+		unregisters = ''.join(i[1] for _, i in defs)
+
 		classes_register_str += '_FORCE_INLINE_ void _register_level_{}() {{{}}}\n\n'.format(
 			level_name.lower(), '\n' + registers if registers != '' else '')
+
+		classes_register_str += '_FORCE_INLINE_ void _unregister_level_{}() {{{}}}\n\n'.format(
+			level_name.lower(), '\n' + unregisters if unregisters != '' else '')
 
 	scripts_header += classes_register_str
 
