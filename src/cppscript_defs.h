@@ -50,5 +50,6 @@ void function(decltype(property) value) {	\
 #define GRESOURCE_LOADER(...)
 #define GRESOURCE_SAVER(...)
 #define GEDITOR_PLUGIN(...)
+#define GSINGLETON(...);
 
 #endif // CPPSCRIPT_HEADER

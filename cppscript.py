@@ -71,7 +71,8 @@ TARGETLESS_KEYWORDS = [
 	'GBIND_METHODS_PREPEND',
 	'GRESOURCE_LOADER',
 	'GRESOURCE_SAVER',
-	'GEDITOR_PLUGIN'
+	'GEDITOR_PLUGIN',
+	'GSINGLETON'
 ] + INIT_LEVELS
 
 ALL_KEYWORDS = KEYWORDS + TARGETLESS_KEYWORDS
@@ -530,6 +531,8 @@ def parse_header(index, filename, filecontent, env):
 						class_defs['init_level'] = 'EDITOR'
 						class_defs['is_editor_plugin'] = True
 
+					case 'GSINGLETON':
+						class_defs['is_singleton'] = True
 
 
 			return not is_ignored
@@ -696,7 +699,7 @@ def write_header(file, defs, env):
 		header_rpc_config = 'void {}::_rpc_config() {{{}}}\n'.format(
 				class_name_full, '\n' + header_rpc_config if header_rpc_config != '' else '')
 		header_bind_methods = '\n\n'.join(i for i in [Hmethod, Hvirtual_method, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '')
-		header_bind_methods = content['bind_methods_append'] + header_bind_methods + content['bind_methods_prepend']
+		header_bind_methods = content['bind_methods_prepend'] + header_bind_methods + content['bind_methods_append']
 
 		header_defs += [f'// {class_name_full} : {content["base"]}\n',
 			'void {}::_bind_methods() {{{}}}\n'.format(
@@ -730,6 +733,7 @@ def write_register_header(defs_all, env):
 	classes_register_levels = {name[12:] : [] for name in INIT_LEVELS}
 
 	loaders_savers = []
+	has_singleton = False
 	def make_register_str_pair(class_name_full, content):
 		register_str = f"\tGDREGISTER_{content['type']}({class_name_full});\n"
 		unregister_str = ''
@@ -750,6 +754,12 @@ def write_register_header(defs_all, env):
 
 		elif 'is_editor_plugin' in content:
 			register_str += f'\tEditorPlugins::add_by_type<{class_name_full}>();\n'
+
+		elif 'is_singleton' in content:
+			nonlocal has_singleton
+			has_singleton = True
+			register_str += f'\tEngine::get_singleton()->register_singleton("{content["class_name"]}", memnew({class_name_full}));\n'
+			unregister_str += f'\tEngine::get_singleton()->unregister_singleton("{content["class_name"]}");\n\tmemdelete({class_name_full}::get_singleton());\n'
 
 		return register_str, unregister_str
 
@@ -778,7 +788,10 @@ def write_register_header(defs_all, env):
 	if loaders_savers != []:
 		scripts_header += '#include <godot_cpp/classes/resource_loader.hpp>\n'
 		scripts_header += '#include <godot_cpp/classes/resource_saver.hpp>\n'
-	
+
+	if has_singleton:
+		scripts_header += '#include <godot_cpp/classes/engine.hpp>\n'
+
 	classes_register_str = ''
 	if classes_register_levels['CORE'] != []:
 		minimal_register_level = 'MODULE_INITIALIZATION_LEVEL_CORE'
