@@ -138,7 +138,12 @@ struct BindCheck<false> {
 	}
 };
 
-};
+template<class T>
+_FORCE_INLINE_ void destroy_object(T& obj) {
+	obj.~T();
+}
+
+}; // namespace impl
 
 template<class T, class ...Args>
 _FORCE_INLINE_ godot::PropertyInfo MakePropertyInfo(Args&&... args) {

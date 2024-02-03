@@ -52,4 +52,12 @@ void function(decltype(property) value) {	\
 #define GEDITOR_PLUGIN(...)
 #define GSINGLETON(...);
 
+#define GSTATIC_MEMBER(s_type, s_name, ...)												\
+friend impl::StaticAccess;																		\
+alignas(s_type) static char s_name ## _impl [sizeof(s_type)];						\
+static inline s_type& s_name = *reinterpret_cast<s_type*>(&s_name ## _impl);
+
+namespace impl {
+struct StaticAccess;
+};
 #endif // CPPSCRIPT_HEADER
