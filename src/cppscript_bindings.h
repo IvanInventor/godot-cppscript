@@ -5,6 +5,8 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/ref.hpp>
 #include <godot_cpp/classes/resource.hpp>
+#include <godot_cpp/core/type_info.hpp>
+#include <gdextension_interface.h>
 
 
 namespace impl {
@@ -16,11 +18,34 @@ template <typename T>
 struct is_defined<T, std::void_t<decltype(T::VARIANT_TYPE)>> : std::true_type {};
 
 template<class T>
-static constexpr bool is_supported_type_v = is_defined<godot::GetTypeInfo<T>>::value;
+struct is_supported_type {
+	static constexpr bool value = is_defined<godot::GetTypeInfo<T>>::value;
+};
 
+// MSVC needs this for no reason
+template<class T>
+struct is_supported_type<godot::BitField<T>> {
+	static constexpr bool value = is_defined<godot::GetTypeInfo<int64_t>>::value;
+};
+//
 
 template<class T>
-struct assert_is_supported_type : std::integral_constant<bool, is_supported_type_v<T>> {
+static constexpr bool is_supported_type_v = is_supported_type<T>::value;
+
+// And this
+template<>
+static constexpr bool is_supported_type_v<godot::Variant**> = true;
+
+template<>
+static constexpr bool is_supported_type_v<const godot::Variant**> = true;
+
+template<>
+static constexpr bool is_supported_type_v<GDExtensionCallError&> = true;
+//
+
+template<class T>
+struct assert_is_supported_type {
+	static constexpr bool value = is_supported_type_v<T>;
 	static_assert(is_supported_type_v<T>, "Type not supported. If it's your custom class, either it had complilation errors, or maybe you forgot to register it with GCLASS()");
 };
 
