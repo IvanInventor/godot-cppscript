@@ -6,19 +6,22 @@ jobs:
   fetch-branch-and-revision:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout test branch
         uses: actions/checkout@v2
         with:
           ref: test
+          submodules: recursive
       
-      - name: Fetch specified revision
+      - name: Fetch revision to test
         run: git fetch origin ${{ github.sha }}
 
+      - name: Checkout cppscript revision
+        run: |
+          cd external/godot-cpp && \
+          git fetch origin ${{ github.sha }}
+          git checkout ${{ github.sha }} && \
+          cd -
+
       - name: Check head
-        run: |
-          git log @
-
-      - name: Check target
-        run: |
-          git log ${{ github.sha }}
-
+        run : |
+          git submodule status
