@@ -9,13 +9,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: test
       
       - name: Fetch specified revision
         run: git fetch origin ${{ github.sha }}
 
-      - name: Check
+      - name: Check head
         run: |
-          git log @ && \
+          git log @
+
+      - name: Check target
+        run: |
           git log ${{ github.sha }}
+
 
