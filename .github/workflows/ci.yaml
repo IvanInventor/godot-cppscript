@@ -12,10 +12,10 @@ jobs:
           ref: ${{ github.event.inputs.branch }}
       
       - name: Fetch specified revision
-        run: git fetch origin ${{ GITHUB_SHA }}
+        run: git fetch origin ${{ github.sha }}
 
       - name: Check
         run: |
           git log @ && \
-          git log ${{ GITHUB_SHA }}
+          git log ${{ github.sha }}
 
