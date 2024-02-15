@@ -1,0 +1,21 @@
+name: Test
+
+on: [pull_request]
+
+jobs:
+  fetch-branch-and-revision:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.inputs.branch }}
+      
+      - name: Fetch specified revision
+        run: git fetch origin ${{ GITHUB_SHA }}
+
+      - name: Check
+        run: |
+          git log @ && \
+          git log ${{ GITHUB_SHA }}
+
