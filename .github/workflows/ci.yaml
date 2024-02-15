@@ -1,6 +1,6 @@
 name: Continuous integration
 
-on: [push, pull_request]
+on: pull_request
 
 env:
   # Only used for the cache key. Increment version to force clean build.
