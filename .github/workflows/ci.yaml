@@ -18,7 +18,7 @@ jobs:
       - name: Checkout cppscript revision
         run: |
           cd external/godot-cpp && \
-          git fetch origin ${{ github.sha }}
+          git fetch ../../ ${{ github.sha }}
           git checkout ${{ github.sha }} && \
           cd -
 
