@@ -110,7 +110,7 @@ jobs:
           git checkout ${{ github.sha }} && \
           cd -
 
-      - name: [TEST] Check head
+      - name: "[TEST] Check head"
         run : |
           git submodule status
 
