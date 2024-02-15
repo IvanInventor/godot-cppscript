@@ -22,4 +22,3 @@ jobs:
         run: |
           git log ${{ github.sha }}
 
-
