@@ -1,10 +1,5 @@
-jobs:
-  fetch-branch-and-revision:
-    runs-on: ubuntu-latest
-    steps:
-
-
 name: Continuous integration
+
 on: [push, pull_request]
 
 env:
