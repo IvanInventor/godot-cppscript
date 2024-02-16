@@ -25,37 +25,34 @@ struct is_supported_type {
 // MSVC needs this for no reason
 template<class T>
 struct is_supported_type<godot::BitField<T>> {
-	static constexpr bool value = is_defined<godot::GetTypeInfo<int64_t>>::value;
+	static constexpr bool value = true;
 };
-//
-
-template<class T>
-static constexpr bool is_supported_type_v = is_supported_type<T>::value;
-
-// And this
-template<>
-static constexpr bool is_supported_type_v<godot::Variant**> = true;
 
 template<>
-static constexpr bool is_supported_type_v<const godot::Variant**> = true;
+struct is_supported_type<godot::Variant**> {
+	static constexpr bool value = true;
+};
 
 template<>
-static constexpr bool is_supported_type_v<GDExtensionCallError&> = true;
+struct is_supported_type<const godot::Variant**> {
+	static constexpr bool value = true;
+};
+
+template<>
+struct is_supported_type<GDExtensionCallError&> {
+	static constexpr bool value = true;
+};
 //
 
 template<class T>
 struct assert_is_supported_type {
-	static constexpr bool value = is_supported_type_v<T>;
-	static_assert(is_supported_type_v<T>, "Type not supported. If it's your custom class, either it had complilation errors, or maybe you forgot to register it with GCLASS()");
+	static constexpr bool value = is_supported_type<T>::value;
+	static_assert(is_supported_type<T>::value, "Type not supported. If it's your custom class, either it had complilation errors, or maybe you forgot to register it with GCLASS()");
 };
 
 template<class T>
-static constexpr bool assert_is_supported_type_v = assert_is_supported_type<T>::value;
-
-
-template<class T>
 struct assert_is_ret_supported {
-	static constexpr bool value = assert_is_supported_type_v<T>;
+	static constexpr bool value = assert_is_supported_type<T>::value;
 };
 template<>
 struct assert_is_ret_supported<void> {
@@ -67,12 +64,12 @@ struct MemberSignature;
 
 template <typename Class, typename Ret, typename... Args>
 struct MemberSignature<Ret (Class::*)(Args...) const> {
-	static constexpr bool value = assert_is_ret_supported<Ret>::value && (assert_is_supported_type_v<Args> && ...);
+	static constexpr bool value = assert_is_ret_supported<Ret>::value && (assert_is_supported_type<Args>::value && ...);
 };
 
 template <typename Class, typename Ret, typename... Args>
 struct MemberSignature<Ret (Class::*)(Args...)> {
-	static constexpr bool value = assert_is_ret_supported<Ret>::value && (assert_is_supported_type_v<Args> && ...);
+	static constexpr bool value = assert_is_ret_supported<Ret>::value && (assert_is_supported_type<Args>::value && ...);
 };
 
 template <typename Ret, typename... Args>
@@ -80,7 +77,7 @@ struct FunctionSignature;
 
 template <typename Ret, typename... Args>
 struct FunctionSignature<Ret (*)(Args...)> {
-	static constexpr bool value = assert_is_ret_supported<Ret>::value && (assert_is_supported_type_v<Args> && ...);
+	static constexpr bool value = assert_is_ret_supported<Ret>::value && (assert_is_supported_type<Args>::value && ...);
 };
 
 
@@ -172,13 +169,13 @@ _FORCE_INLINE_ void destroy_object(T& obj) {
 
 template<class T, class ...Args>
 _FORCE_INLINE_ godot::PropertyInfo MakePropertyInfo(Args&&... args) {
-	static_assert(impl::assert_is_supported_type_v<T>, "Property of this type is not supported");
+	static_assert(impl::assert_is_supported_type<T>::value, "Property of this type is not supported");
 	
 	using IsResource = impl::IsResourceProperty<T>;
 	if constexpr(sizeof...(Args) == 1 && IsResource::value) {
-		return impl::BindCheck<impl::assert_is_supported_type_v<T>>::template MakePropertyInfo<T>(std::forward<Args>(args)..., godot::PROPERTY_HINT_RESOURCE_TYPE, IsResource::type::get_class_static());
+		return impl::BindCheck<impl::assert_is_supported_type<T>::value>::template MakePropertyInfo<T>(std::forward<Args>(args)..., godot::PROPERTY_HINT_RESOURCE_TYPE, IsResource::type::get_class_static());
 	} else {
-		return impl::BindCheck<impl::assert_is_supported_type_v<T>>::template MakePropertyInfo<T>(std::forward<Args>(args)...);
+		return impl::BindCheck<impl::assert_is_supported_type<T>::value>::template MakePropertyInfo<T>(std::forward<Args>(args)...);
 	}
 }
 
