@@ -105,7 +105,7 @@ jobs:
 
       - name: Checkout needed revision
         run: |
-          cd external/godot-cpp && \
+          cd external/cppscript && \
           git fetch ../../ ${{ github.sha }}
           git checkout ${{ github.sha }} && \
           cd -
