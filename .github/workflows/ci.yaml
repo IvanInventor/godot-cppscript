@@ -6,9 +6,9 @@ on:
   push:
     branches: [master, next]
 
-env:
-  # Only used for the cache key. Increment version to force clean build.
-  GODOT_BASE_BRANCH: master
+#env:
+#  # Only used for the cache key. Increment version to force clean build.
+#  GODOT_BASE_BRANCH: master
 
 concurrency:
   group: ci-${{github.actor}}-${{github.head_ref || github.run_number}}-${{github.ref}}
@@ -25,8 +25,8 @@ jobs:
           - name: 🐧 Linux (GCC)
             os: ubuntu-20.04
             platform: linux
-            artifact-name: godot-cpp-linux-glibc2.27-x86_64-release
-            artifact-path: bin/libgodot-cpp.linux.template_release.x86_64.a
+            artifact-name: libscripts-linux-glibc2.27-x86_64-debug
+            artifact-path: bin/libscripts.linux.template_debug.x86_64.so
             run-tests: true
             cache-name: linux-x86_64
 
@@ -114,10 +114,6 @@ jobs:
           git checkout ${{ github.sha }} && \
           cd -
 
-      - name: "[TEST] Check head"
-        run : |
-          git submodule status
-
       - name: Setup Godot build cache
         if: false
         uses: ./.github/actions/godot-cache
@@ -167,6 +163,7 @@ jobs:
         run: |
           cmake --build build
 
+#       TODO: build with scons also
 #      - name: Install scons
 #        run: |
 #          python -m pip install scons==4.0.0
@@ -190,34 +187,30 @@ jobs:
 #          cd test
 #          scons platform=${{ matrix.platform }} target=template_release ${{ matrix.flags }}
 #
-#      - name: Download latest Godot artifacts
-#        uses: dsnopek/action-download-artifact@1322f74e2dac9feed2ee76a32d9ae1ca3b4cf4e9
-#        if: ${{ matrix.run-tests }}
-#        with:
-#          repo: godotengine/godot
-#          branch: master
-#          event: push
-#          workflow: linux_builds.yml
-#          workflow_conclusion: success
-#          name: linux-editor-mono
-#          search_artifacts: true
-#          check_artifacts: true
-#          ensure_latest: true
-#          path: godot-artifacts
-#
-#      - name: Run tests
-#        if: ${{ matrix.run-tests }}
-#        run: |
-#          chmod +x ./godot-artifacts/godot.linuxbsd.editor.x86_64.mono
-#          ./godot-artifacts/godot.linuxbsd.editor.x86_64.mono --headless --version
-#          cd test
-#          # Need to run the editor so .godot is generated... but it crashes! Ignore that :-)
-#          (cd project && (timeout 10 ../../godot-artifacts/godot.linuxbsd.editor.x86_64.mono --editor --headless --quit >/dev/null 2>&1 || true))
-#          GODOT=../godot-artifacts/godot.linuxbsd.editor.x86_64.mono ./run-tests.sh
-#
-#      - name: Upload artifact
-#        uses: actions/upload-artifact@v3
-#        with:
-#          name: ${{ matrix.artifact-name }}
-#          path: ${{ matrix.artifact-path }}
-#          if-no-files-found: error
+      - name: Download latest Godot artifacts
+        uses: dsnopek/action-download-artifact@1322f74e2dac9feed2ee76a32d9ae1ca3b4cf4e9
+        if: ${{ matrix.run-tests }}
+        with:
+          repo: godotengine/godot
+          branch: master
+          event: push
+          workflow: linux_builds.yml
+          workflow_conclusion: success
+          name: linux-editor-mono
+          search_artifacts: true
+          check_artifacts: true
+          ensure_latest: true
+          path: godot-artifacts
+
+      - name: Run tests
+        if: ${{ matrix.run-tests }}
+        run: |
+          chmod +x ./godot-artifacts/godot.linuxbsd.editor.x86_64.mono
+          GODOT=./godot-artifacts/godot.linuxbsd.editor.x86_64.mono ./run-tests.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+          if-no-files-found: error
