@@ -72,7 +72,8 @@ TARGETLESS_KEYWORDS = [
 	'GRESOURCE_LOADER',
 	'GRESOURCE_SAVER',
 	'GEDITOR_PLUGIN',
-	'GSINGLETON'
+	'GSINGLETON',
+	'GSTATIC_MEMBER'
 ] + INIT_LEVELS
 
 ALL_KEYWORDS = KEYWORDS + TARGETLESS_KEYWORDS
@@ -94,6 +95,12 @@ RPC_CONFIG_BODY = """	{{
 	opts["channel"] = {3};
 	rpc_config("{4}", opts);
 	}}
+"""
+STATIC_ACCESS_CLASS_BODY = """namespace impl {{
+struct StaticAccess {{
+{}}};
+}};
+
 """
 
 # Helpers
@@ -377,6 +384,7 @@ def parse_header(index, filename, filecontent, env):
 			'enum_constants' : {},
 			'constants' : [],
 			'bitfields' : {},
+			'static_members' : [],
 			'bind_methods_append' : '',
 			'bind_methods_prepend' : ''
 			}
@@ -533,6 +541,10 @@ def parse_header(index, filename, filecontent, env):
 
 					case 'GSINGLETON':
 						class_defs['is_singleton'] = True
+
+					case 'GSTATIC_MEMBER':
+						type, name, *init = get_macro_args(filecontent, macro)
+						class_defs['static_members'].append((type, name, ', '.join(init)))
 
 
 			return not is_ignored
@@ -696,6 +708,9 @@ def write_header(file, defs, env):
 			variable_name = content["class_name"] + '_saver'
 			global_variables.append(f'Ref<{class_name_full}> {variable_name};')
 
+		for type, name, init in content['static_members']:
+			global_variables.append(f'alignas({type}) char {class_name_full}::{name + "_impl"}[] = {{0}};')
+
 		header_rpc_config = 'void {}::_rpc_config() {{{}}}\n'.format(
 				class_name_full, '\n' + header_rpc_config if header_rpc_config != '' else '')
 		header_bind_methods = '\n\n'.join(i for i in [Hmethod, Hvirtual_method, Hstatic_method, Hvaragr_method, Hprop, Hsignal, Henum, Hbitfield, Hconst] if i != '')
@@ -731,12 +746,16 @@ def write_register_header(defs_all, env):
 	target = os.path.join(env['header_dir'], 'scripts.gen.h')
 	scripts_header = DONOTEDIT_MSG
 	classes_register_levels = {name[12:] : [] for name in INIT_LEVELS}
+	static_members_levels = {name[12:] : [] for name in INIT_LEVELS}
 
 	loaders_savers = []
 	has_singleton = False
 	def make_register_str_pair(class_name_full, content):
 		register_str = f"\tGDREGISTER_{content['type']}({class_name_full});\n"
 		unregister_str = ''
+
+		static_members_levels[content['init_level']] += \
+			[(type, f'{class_name_full}::{name}', init) for type, name, init in content['static_members']]
 
 		if 'is_resource_loader' in content:
 			variable_name = f'{content["class_name"]}_loader'
@@ -768,6 +787,7 @@ def write_register_header(defs_all, env):
 		if len(classes) == 0:
 			continue
 
+		scripts_header += '#include <cppscript_bindings.h>\n'
 		scripts_header += '#include "{}"\n'.format(os.path.relpath(file, os.path.dirname(target)).replace('\\', '/'))
 
 		for class_name_full, content in classes.items():
@@ -793,6 +813,7 @@ def write_register_header(defs_all, env):
 		scripts_header += '#include <godot_cpp/classes/engine.hpp>\n'
 
 	classes_register_str = ''
+	static_members_init_deinit_str = ''
 	if classes_register_levels['CORE'] != []:
 		minimal_register_level = 'MODULE_INITIALIZATION_LEVEL_CORE'
 	elif classes_register_levels['SERVERS'] != []:
@@ -805,16 +826,26 @@ def write_register_header(defs_all, env):
 			('\n'.join(loaders_savers) + '\n\n' if loaders_savers != [] else '')
 
 	for level_name, defs in classes_register_levels.items():
-		registers = ''.join(i[0] for _, i in defs)
-		unregisters = ''.join(i[1] for _, i in defs)
+		registers = ''.join(i[0] for _, i in defs) + f'\timpl::StaticAccess::_init_static_members_level_{level_name.lower()}();\n'
+		unregisters = ''.join(i[1] for _, i in defs) + f'\timpl::StaticAccess::_uninit_static_members_level_{level_name.lower()}();\n'
+
+		static_members_init = ''.join(f'\t\tmemnew_placement(&{name}, {type}({init}));\n' for type, name, init in static_members_levels[level_name])
+		static_members_deinit = ''.join(f'\t\timpl::destroy_object({name});\n' for type, name, init in static_members_levels[level_name])
+
+		static_members_init_deinit_str += '\tstatic _FORCE_INLINE_ void _init_static_members_level_{}() {{{}}}\n\n'.format(
+			level_name.lower(), '\n' + static_members_init + '\t' if static_members_init != '' else '')
+
+		static_members_init_deinit_str += '\tstatic _FORCE_INLINE_ void _uninit_static_members_level_{}() {{{}}}\n\n'.format(
+			level_name.lower(), '\n' + static_members_deinit + '\t' if static_members_deinit != '' else '')
 
 		classes_register_str += '_FORCE_INLINE_ void _register_level_{}() {{{}}}\n\n'.format(
-			level_name.lower(), '\n' + registers if registers != '' else '')
+			level_name.lower(), '\n' + registers)
 
 		classes_register_str += '_FORCE_INLINE_ void _unregister_level_{}() {{{}}}\n\n'.format(
-			level_name.lower(), '\n' + unregisters if unregisters != '' else '')
+			level_name.lower(), '\n' + unregisters)
 
-	scripts_header += classes_register_str
+	static_members_init_deinit_str = STATIC_ACCESS_CLASS_BODY.format(static_members_init_deinit_str)
+	scripts_header += static_members_init_deinit_str + classes_register_str
 
 	new_hash = hashlib.md5(scripts_header.encode()).hexdigest()
 
