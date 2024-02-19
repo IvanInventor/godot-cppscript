@@ -58,7 +58,7 @@ jobs:
             flags: use_mingw=yes
             run-tests: false
             cache-name: windows-x86_64-mingw
-            cmake-generator: "MinGW Makefiles"
+            cmake-generator: "Ninja Multi-Config"
 #
 #          - name: 🍎 macOS (universal)
 #            os: macos-11
@@ -157,7 +157,6 @@ jobs:
         uses: ssrobins/install-cmake@v1
        
       - name: Install Ninja
-        if: ${{ matrix.platform != 'windows' }}
         uses: ashutoshvarma/setup-ninja@master
 
       - name: Setup CMake
