@@ -25,7 +25,7 @@ jobs:
           - name: 🐧 Linux (GCC)
             os: ubuntu-20.04
             platform: linux
-            artifact-name: libscripts-linux-glibc2.27-x86_64-debug
+            artifact-name: libscripts.linux.template_debug.x86_64.so
             artifact-path: bin/libscripts.linux.template_debug.x86_64.so
             run-tests: true
             cache-name: linux-x86_64
@@ -44,8 +44,8 @@ jobs:
           - name: 🏁 Windows (x86_64, MSVC)
             os: windows-2019
             platform: windows
-            artifact-name: godot-cpp-windows-msvc2019-x86_64-release
-            artifact-path: bin/libgodot-cpp.windows.template_release.x86_64.lib
+            artifact-name: libscripts.windows.template_debug.x86_64.dll
+            artifact-path: bin/libscripts.windows.template_debug.x86_64.dll
             run-tests: false
             cache-name: windows-x86_64-msvc
             cmake-generator: "Visual Studio 16 2019"
@@ -53,8 +53,8 @@ jobs:
           - name: 🏁 Windows (x86_64, MinGW)
             os: windows-2019
             platform: windows
-            artifact-name: godot-cpp-linux-mingw-x86_64-release
-            artifact-path: bin/libgodot-cpp.windows.template_release.x86_64.a
+            artifact-name: libscripts.windows.template_debug.x86_64.dll
+            artifact-path: bin/libscripts.windows.template_debug.x86_64.dll
             flags: use_mingw=yes
             run-tests: false
             cache-name: windows-x86_64-mingw
