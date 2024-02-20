@@ -707,6 +707,8 @@ def write_header(file, defs, env):
 		elif 'is_resource_saver' in content:
 			variable_name = content["class_name"] + '_saver'
 			global_variables.append(f'Ref<{class_name_full}> {variable_name};')
+		elif 'is_singleton' in content:
+			global_variables.append(f'{content["class_name"]}* {content["class_name"]}_singleton_ptr;')
 
 		for type, name, init in content['static_members']:
 			global_variables.append(f'alignas({type}) char {class_name_full}::{name + "_impl"}[] = {{0}};')
@@ -777,8 +779,9 @@ def write_register_header(defs_all, env):
 		elif 'is_singleton' in content:
 			nonlocal has_singleton
 			has_singleton = True
-			register_str += f'\tEngine::get_singleton()->register_singleton("{content["class_name"]}", memnew({class_name_full}));\n'
-			unregister_str += f'\tEngine::get_singleton()->unregister_singleton("{content["class_name"]}");\n\tmemdelete({class_name_full}::get_singleton());\n'
+			loaders_savers.append(f'extern {content["class_name"]}* {content["class_name"]}_singleton_ptr;')
+			register_str += f'\t{content["class_name"]}_singleton_ptr = memnew({class_name_full});\n\tEngine::get_singleton()->register_singleton("{content["class_name"]}", {content["class_name"]}_singleton_ptr);\n'
+			unregister_str += f'\tEngine::get_singleton()->unregister_singleton("{content["class_name"]}");\n\tmemdelete({content["class_name"]}_singleton_ptr);\n'
 
 		return register_str, unregister_str
 
