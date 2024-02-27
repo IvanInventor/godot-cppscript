@@ -832,7 +832,10 @@ def write_register_header(defs_all, env):
 		registers = ''.join(i[0] for _, i in defs) + f'\timpl::StaticAccess::_init_static_members_level_{level_name.lower()}();\n'
 		unregisters = ''.join(i[1] for _, i in defs) + f'\timpl::StaticAccess::_uninit_static_members_level_{level_name.lower()}();\n'
 
-		static_members_init = ''.join(f'\t\tmemnew_placement(&{name}, {type}({init}));\n' for type, name, init in static_members_levels[level_name])
+		static_members_init = ''.join(
+				f'\t\tnew ("", &{name}, sizeof({type}), "") {type}({init});\n'
+				#f'\t\tmemnew_placement(&{name}, {type}({init}));\n'
+				for type, name, init in static_members_levels[level_name])
 		static_members_deinit = ''.join(f'\t\timpl::destroy_object({name});\n' for type, name, init in static_members_levels[level_name])
 
 		static_members_init_deinit_str += '\tstatic _FORCE_INLINE_ void _init_static_members_level_{}() {{{}}}\n\n'.format(
