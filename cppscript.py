@@ -426,7 +426,7 @@ def parse_header(index, filename, filecontent, env):
 							'setter' : args[0],
 							'getter' : args[1],
 							'hint' : 'PROPERTY_HINT_' + args[2].upper() if len(args) > 2 else None,
-							'hint_string' : args[3] if len(args) > 3 else '""'
+							'args' : ', '.join(args[3:]) if len(args) > 3 else '""'
 							}
 						is_ignored = False
 
@@ -678,7 +678,7 @@ def write_header(file, defs, env):
 				prev_subgroup = subgroup
 
 			prop_name = group_ + subgroup_ + prop['name']
-			hints = f', {prop["hint"]}, {prop["hint_string"]}' if prop['hint'] != None else ''
+			hints = f', {prop["hint"]}, {prop["args"]}' if prop['hint'] != None else ''
 			Hprop += f'\t\tADD_PROPERTY(MakePropertyInfo<decltype({prop["name"]})>("{prop_name}"{hints}), "{prop["setter"]}", "{prop["getter"]}");\n'
 
 		defs[class_name_full]['gen_setters'] = gen_setters
