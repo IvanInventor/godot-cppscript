@@ -1,6 +1,8 @@
 from clang.cindex import Index, TranslationUnit, CursorKind, TokenKind, AccessSpecifier
 import os, sys, json, hashlib, shutil
 
+from code_format import CODE_FORMAT
+
 if 'NOT_SCONS' not in os.environ.keys():
 	from SCons.Script import Glob
 	from SCons.Builder import Builder
@@ -78,30 +80,6 @@ TARGETLESS_KEYWORDS = [
 
 ALL_KEYWORDS = KEYWORDS + TARGETLESS_KEYWORDS
 
-DONOTEDIT_MSG = "/*-- GENERATED FILE - DO NOT EDIT --*/\n\n"
-
-CPPSCRIPT_BODY = DONOTEDIT_MSG + """#ifndef {0}
-#define {0}
-#include <cppscript_defs.h>
-#include "properties.gen.h"
-#endif // {0}
-"""
-
-RPC_CONFIG_BODY = """	{{
-	Dictionary opts;
-	opts["rpc_mode"] = MultiplayerAPI::{0};
-	opts["transfer_mode"] = MultiplayerPeer::{1};
-	opts["call_local"] = {2};
-	opts["channel"] = {3};
-	rpc_config("{4}", opts);
-	}}
-"""
-STATIC_ACCESS_CLASS_BODY = """namespace impl {{
-struct StaticAccess {{
-{}}};
-}};
-
-"""
 
 # Helpers
 class CppScriptException(Exception):
@@ -268,7 +246,7 @@ def generate_header(source, env, get_file):
 	path = os.path.join(env['header_dir'], env['header_name'])
 	if not os.path.exists(path):
 		with open(path, 'w') as file:
-			file.write(CPPSCRIPT_BODY.format(env['header_name'].replace(' ', '_').replace('.', '_').upper()))
+			file.write(CODE_FORMAT.CPPSCRIPT_BODY.format(env['header_name'].replace(' ', '_').replace('.', '_').upper()))
 
 	try:
 		defs_file_path = os.path.join(env['gen_dir'], 'defs.json')
@@ -627,10 +605,22 @@ def write_header(file, defs, env):
 
 		for method in content['methods']:
 			if 'varargs' not in method.keys():
-				args = ''.join(f', "{argname}"' if argname != '' else '' for argtype, argname, _ in method['args'])
-				defvals = ''.join(f', DEFVAL({defval})' for _, _, defval in method['args'] if defval != '')
+				args = ''.join(
+						CODE_FORMAT.ARGNAMES_SEPARATOR.format(argname)
+							if argname != '' else '' for argtype, argname, _ in method['args'])
+
+				defvals = ''.join(
+						CODE_FORMAT.DEFAULT_VALUES_SEPARATOR.format(defval)
+							for _, _, defval in method['args'] if defval != '')
+
 				if method['is_static']:
-					Hstatic_method += f'\tStaticMethod<&{class_name}::{method["name"]}{defvals}>::bind(get_class_static(), D_METHOD("{method["bind_name"]}"{args}));\n'
+					Hstatic_method += CODE_FORMAT.STATIC_METHOD_REGISTER.format(
+						class_name,
+						method["name"],
+						method["bind_name"],
+						args,
+						defvals
+					)
 
 				# TODO: virtual method bindings need
 				# more work with GDExtension
@@ -638,11 +628,17 @@ def write_header(file, defs, env):
 				#	Hvirtual_method += f'\tMethod<&{class_name}::{method["name"]}>::bind_virtual("{method["bind_name"]}"{defvals});\n'
 
 				else:
-					Hmethod += f'\tMethod<&{class_name}::{method["name"]}>::bind(D_METHOD("{method["bind_name"]}"{args}){defvals});\n'
+					Hmethod += CODE_FORMAT.METHOD_REGISTER.format(
+						class_name,
+						method["name"],
+						method["bind_name"],
+						args,
+						defvals
+					)
 
 				if 'rpc_config' in method.keys():
 					has_rpc_config = True
-					header_rpc_config += RPC_CONFIG_BODY.format(
+					header_rpc_config += CODE_FORMAT.RPC_CONFIG_BODY.format(
 						method['rpc_config']['rpc_mode'],
 						method['rpc_config']['transfer_mode'],
 						method['rpc_config']['call_local'],
@@ -650,56 +646,89 @@ def write_header(file, defs, env):
 						method["name"]
 						)
 			else:
-				args_list = '\n'.join(f'\t\t,MakePropertyInfo<{type}>("{name}")' for type, name in method['varargs'])
+				args_list = CODE_FORMAT.expand_property_info_list(method['varargs'])
 
-				Hvaragr_method += f'\tMethod<&{class_name}::{method["name"]}>::bind_vararg("{method["bind_name"]}"' + ('\n' + args_list + '\n\t\t);\n' if args_list != '' else ');\n')
+				Hvaragr_method += CODE_FORMAT.VARARG_REGISTER.format(
+					class_name,
+					method["name"],
+					method["bind_name"],
+					'\n' + args_list + '\n\t\t'
+		 				if args_list != '' else '')
 
 		prev_group, prev_subgroup = '', ''
 		for prop in content['properties']:
 			if prop['getter'] not in methods_list:
-				Hmethod += f'\tMethod<&{class_name}::{prop["getter"]}>::bind(D_METHOD("{prop["getter"]}"));\n'
-				property_set_get_defs += f'GENERATE_GETTER({class_name_full}::{prop["getter"]}, {class_name_full}::{prop["name"]});\n'
+				Hmethod += CODE_FORMAT.METHOD_REGISTER.format(
+					class_name,
+					prop["getter"],
+					prop["getter"],
+					'',
+					''
+					)
+				property_set_get_defs += CODE_FORMAT.GENERATE_GETTER.format(
+					class_name_full,
+					prop["getter"],
+					prop["name"]
+					)
 				gen_getters.append([prop["getter"], prop["name"]])
 
 			if prop['setter'] not in methods_list:
-				Hmethod += f'\tMethod<&{class_name}::{prop["setter"]}>::bind(D_METHOD("{prop["setter"]}", "value"));\n'
-				property_set_get_defs += f'GENERATE_SETTER({class_name_full}::{prop["setter"]}, {class_name_full}::{prop["name"]});\n'
+				Hmethod += CODE_FORMAT.METHOD_REGISTER.format(
+					class_name,
+					prop["setter"],
+					prop["setter"],
+					', "value"',
+					''
+					)
+				property_set_get_defs += CODE_FORMAT.GENERATE_SETTER.format(
+					class_name_full,
+					prop["setter"],
+					prop["name"]
+					)
 				gen_setters.append([prop["setter"], prop["name"]])
 
 			group, subgroup = prop['group'], prop['subgroup']
 			group_ = group_name(group)
 			if group != '' and group != prev_group:
-				Hprop += f'\tADD_GROUP("{group}", "{group_}");\n'
+				Hprop += CODE_FORMAT.ADD_GROUP.format(group, group_)
 				prev_group = group
 
 			subgroup_ = group_name(subgroup)
 			if subgroup != '' and subgroup != prev_subgroup:
-				Hprop += f'\tADD_SUBGROUP("{subgroup}", "{group_}{subgroup_}");\n'
+				Hprop += CODE_FORMAT.ADD_SUBGROUP.format(subgroup, subgroup_)
 				prev_subgroup = subgroup
 
 			prop_name = group_ + subgroup_ + prop['name']
-			hints = f', {prop["hint"]}, {prop["args"]}' if prop['hint'] != None else ''
-			Hprop += f'\t\tADD_PROPERTY(MakePropertyInfo<decltype({prop["name"]})>("{prop_name}"{hints}), "{prop["setter"]}", "{prop["getter"]}");\n'
+			hints = CODE_FORMAT.PROPERTY_HINTS.format(prop["hint"], prop["args"]) if prop['hint'] != None else ''
+			Hprop += CODE_FORMAT.ADD_PROPERTY.format(
+				CODE_FORMAT.PROPERTY_INFO.format(f'decltype({prop["name"]})', prop_name, hints),
+				prop["setter"],
+				prop["getter"]
+				)
 
 		defs[class_name_full]['gen_setters'] = gen_setters
 		defs[class_name_full]['gen_getters'] = gen_getters
 
 		for signal_name, args in content['signals']:
-			args_str = '\n'.join(f'\t\t,MakePropertyInfo<{arg_type}>("{arg_name}")' for arg_type, arg_name in args)
-			Hsignal += f'\tADD_SIGNAL(MethodInfo("{signal_name}"' + ('\n' + args_str + '\n\t\t' if args_str != '' else '') + '));\n'
+			args_str = '\n'.join('\t\t,' + CODE_FORMAT.PROPERTY_INFO.format(arg_type, arg_name, '')
+				for arg_type, arg_name in args)
+			Hsignal += CODE_FORMAT.ADD_SIGNAL.format(
+				signal_name,
+				'\n' + args_str + '\n\t\t' if args_str != '' else ''
+				)
 
 		for enum, consts in content['enum_constants'].items():
-			outside_bind += f'VARIANT_ENUM_CAST({enum});\n'
+			outside_bind += CODE_FORMAT.VARIANT_ENUM_CAST.format(enum)
 			for const in consts:
-				Henum += f'\tBIND_ENUM_CONSTANT({const});\n'
+				Henum += CODE_FORMAT.BIND_ENUM_CONSTANT.format(const)
 
 		for enum, consts in content['bitfields'].items():
-			outside_bind += f'VARIANT_BITFIELD_CAST({enum});\n'
+			outside_bind += CODE_FORMAT.VARIANT_BITFIELD_CAST.format(enum)
 			for const in consts:
-				Hbitfield += f'\tBIND_BITFIELD_FLAG({const});\n'
+				Hbitfield += CODE_FORMAT.BIND_BITFIELD_FLAG.format(const)
 
 		for const in content['constants']:
-			Hconst += f'\tBIND_CONSTANT({const});\n'
+			Hconst += CODE_FORMAT.BIND_CONSTANT.format(const)
 
 		if 'is_resource_loader' in content:
 			variable_name = content["class_name"] + '_loader'
@@ -737,7 +766,7 @@ def write_header(file, defs, env):
 			header_include = '#include <godot_cpp/classes/multiplayer_api.hpp>\n' + header_include
 			header_include = '#include <godot_cpp/classes/multiplayer_peer.hpp>\n' + header_include
 
-		content = DONOTEDIT_MSG + header_include + '\n'.join(header_defs)
+		content = CODE_FORMAT.DONOTEDIT_MSG + header_include + '\n'.join(header_defs)
 
 	os.makedirs(os.path.dirname(gen_filename), exist_ok=True)
 	with open(gen_filename, 'w') as fileopen:
@@ -746,14 +775,14 @@ def write_header(file, defs, env):
 
 def write_register_header(defs_all, env):
 	target = os.path.join(env['header_dir'], 'scripts.gen.h')
-	scripts_header = DONOTEDIT_MSG
+	scripts_header = CODE_FORMAT.DONOTEDIT_MSG
 	classes_register_levels = {name[12:] : [] for name in INIT_LEVELS}
 	static_members_levels = {name[12:] : [] for name in INIT_LEVELS}
 
 	loaders_savers = []
 	has_singleton = False
 	def make_register_str_pair(class_name_full, content):
-		register_str = f"\tGDREGISTER_{content['type']}({class_name_full});\n"
+		register_str = CODE_FORMAT.REGISTER_CLASS.format(content['type'], class_name_full)
 		unregister_str = ''
 
 		static_members_levels[content['init_level']] += \
@@ -850,7 +879,7 @@ def write_register_header(defs_all, env):
 		classes_register_str += '_FORCE_INLINE_ void _unregister_level_{}() {{{}}}\n\n'.format(
 			level_name.lower(), '\n' + unregisters)
 
-	static_members_init_deinit_str = STATIC_ACCESS_CLASS_BODY.format(static_members_init_deinit_str)
+	static_members_init_deinit_str = CODE_FORMAT.STATIC_ACCESS_CLASS_BODY.format(static_members_init_deinit_str)
 	scripts_header += static_members_init_deinit_str + classes_register_str
 
 	new_hash = hashlib.md5(scripts_header.encode()).hexdigest()
@@ -867,11 +896,16 @@ def write_register_header(defs_all, env):
 
 def write_property_header(new_defs, env):
 	filepath = os.path.join(env['header_dir'], 'properties.gen.h')
-	body = DONOTEDIT_MSG
+	body = CODE_FORMAT.DONOTEDIT_MSG
 	for filename, filecontent in new_defs['files'].items():
 		classcontent = filecontent['content']
 		for class_name_full, content in classcontent.items():
-			gen_setgets = [f' \\\nGENERATE_GETTER_DECLARATION({g}, {n})' for g, n in content['gen_getters']] + [f' \\\nGENERATE_SETTER_DECLARATION({g}, {n})' for g, n in content['gen_setters']]
+			gen_setgets = [
+				' \\\n' + CODE_FORMAT.GENERATE_GETTER_DECLARATION.format(method, property)
+					for method, property in content['gen_getters']] + [
+				' \\\n' + CODE_FORMAT.GENERATE_SETTER_DECLARATION.format(method, property)
+					for method, property in content['gen_setters']]
+
 			body += f'#define GSETGET_{content["class_name"]}' + ''.join(gen_setgets) + '\n\n'
 
 	with open(filepath, 'w') as file:
