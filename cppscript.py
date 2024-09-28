@@ -34,10 +34,11 @@ if __name__ != '__main__':
 
 			header_path = env['cppscript_env']['header_dir']
 
+			# Generate embedded headers once
 			bindings = os.path.join(header_path, 'cppscript_bindings.h')
 			defs = os.path.join(header_path, 'cppscript_defs.h')
 			def generate_emitter(target, source, env):
-				target += [env.File(bindings), env.File(defs)]
+				return target + [env.File(bindings), env.File(defs)], source
 
 			def generate(target, source, env):
 				print("REGENERATED HEADERS")
@@ -46,11 +47,9 @@ if __name__ != '__main__':
 				with open(defs, 'w') as file:
 					file.write(CPPSCRIPT_DEFS_H)
 			
-			generator = Builder(action=generete, emitter=enerate_emitter)
+			generator = Builder(action=generate, emitter=generate_emitter)(env)
 			builder = self.builder(env, source=source, *other, *args, **kwargs)
-			env.Depends(generator, builder)
-			#env.SideEffect(os.path.join(header_path, 'cppscript_defs.h'), builder)
-			#env.SideEffect(os.path.join(header_path, 'cppscript_bindings.h'), builder)
+			env.Depends(builder, generator)
 
 			return builder
 
