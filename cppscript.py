@@ -1,9 +1,12 @@
 from clang.cindex import Index, TranslationUnit, CursorKind, TokenKind, AccessSpecifier
 import os, sys, json, hashlib, shutil
 
-from code_format import CODE_FORMAT
+#TODO: embed
+#from code_format import CODE_FORMAT
 
-if 'NOT_SCONS' not in os.environ.keys():
+if __name__ != '__main__':
+    # Ran as module from SConstruct
+
 	from SCons.Script import Glob
 	from SCons.Builder import Builder
 
@@ -17,22 +20,39 @@ if 'NOT_SCONS' not in os.environ.keys():
 		def __init__(self):
 			self.builder = Builder(action=generate_header_scons, emitter=generate_header_emitter)
 
-		def __call__(self, scons_env, source, call_args, cwd = os.getcwd(), *args, **kwargs):
-			env, *other = call_args
-			cppscript_src = os.path.join(os.path.dirname(__file__), 'src')
+		def __call__(self, env, source, call_args, cwd = os.getcwd(), *args, **kwargs):
+			cppscript_env, *other = call_args
 			# Convert scons variables to cppscript's env
-			scons_env['cppscript_env'] = {
-				'header_name' : env['header_name'],
-				'header_dir' : resolve_path(str(env['header_dir']), cwd),
-				'gen_dir' : resolve_path(str(env['gen_dir']), cwd),
-				'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in env.get('compile_defs', [])},
-				'include_paths' : {resolve_path(str(i), cwd) for i in [cppscript_src, env['header_dir']] + env.get('include_paths', [])},
-				'auto_methods' : env['auto_methods']
+			env['cppscript_env'] = {
+				'header_name' : cppscript_env['header_name'],
+				'header_dir' : resolve_path(str(cppscript_env['header_dir']), cwd),
+				'gen_dir' : resolve_path(str(cppscript_env['gen_dir']), cwd),
+				'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in cppscript_env.get('compile_defs', [])},
+				'include_paths' : {resolve_path(str(i), cwd) for i in [cppscript_env['header_dir']] + cppscript_env.get('include_paths', [])},
+				'auto_methods' : cppscript_env['auto_methods']
 				}
 
-			# Append needed directories
-			scons_env.Append(CPPPATH=[cppscript_src, resolve_path(env['header_dir'], cwd)])
-			return self.builder(scons_env, source=source, *other, *args, **kwargs)
+			header_path = env['cppscript_env']['header_dir']
+
+			bindings = os.path.join(header_path, 'cppscript_bindings.h')
+			defs = os.path.join(header_path, 'cppscript_defs.h')
+			def generate_emitter(target, source, env):
+				target += [env.File(bindings), env.File(defs)]
+
+			def generate(target, source, env):
+				print("REGENERATED HEADERS")
+				with open(bindings, 'w') as file:
+					file.write(CPPSCRIPT_BINDINGS_H)
+				with open(defs, 'w') as file:
+					file.write(CPPSCRIPT_DEFS_H)
+			
+			generator = Builder(action=generete, emitter=enerate_emitter)
+			builder = self.builder(env, source=source, *other, *args, **kwargs)
+			env.Depends(generator, builder)
+			#env.SideEffect(os.path.join(header_path, 'cppscript_defs.h'), builder)
+			#env.SideEffect(os.path.join(header_path, 'cppscript_bindings.h'), builder)
+
+			return builder
 
 
 	def GlobRecursive(path, pattern, **kwargs):
