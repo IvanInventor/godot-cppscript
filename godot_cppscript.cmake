@@ -4,37 +4,21 @@ find_package(Python3 3.4 REQUIRED)
 
 if(CMAKE_SCRIPT_MODE_FILE)
     # Ran as configure script
-    set(LIBRARY_NAME_FULL "${CMAKE_ARGV3}")
-    set(CPP_PATH "${CMAKE_ARGV4}")
-    set(H_PATH "${CMAKE_ARGV5}")
-    set(GDEXT_PATH "${CMAKE_ARGV6}")
 
-    set(REFERENCE_STR "Needed arguments (<argument> - example):
+@CMAKE_EMBED_CONFIGURE_SCRIPT@
 
-    <library_name>              (`my_library_name`)
-    <cpp_file_path>             (`src/register_types.cpp`)
-    <header_file_path>          (`include/register_types.h`)
-    <gdextension_file_path>     (`project/my_library.gdextension`"
-    )
-
-    if("${LIBRARY_NAME_FULL}" STREQUAL "")
-        message(FATAL_ERROR "No `library_name` argument.\n${REFERENCE_STR}")
-    elseif("${CPP_PATH}" STREQUAL "")
-        message(FATAL_ERROR "No path to `.cpp` file.\n${REFERENCE_STR}")
-    elseif("${H_PATH}" STREQUAL "")
-        message(FATAL_ERROR "No path to `.h` file.\n${REFERENCE_STR}")
-    elseif("${GDEXT_PATH}" STREQUAL "")
-        message(FATAL_ERROR "No path to `.gdextension` file.\n${REFERENCE_STR}")
-    endif()
+	 # Pass args to python config script
+	 math(EXPR ARGC "${CMAKE_ARGC} - 1")
+	 foreach(i RANGE 3 ${ARGC})
+		 list(APPEND ARGS "${CMAKE_ARGV${i}}")
+	 endforeach()
 
     execute_process(
         COMMAND
             "${Python3_EXECUTABLE}"
-            "configure"
-            "${LIBRARY_NAME_FULL}"
-            "${CPP_PATH}"
-            "${H_PATH}"
-            "${GDEXT_PATH}"
+				"-c"
+				"${PY_CONFIGURE_SCRIPT}"
+				${ARGS}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
 
