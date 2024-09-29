@@ -43,14 +43,19 @@ SCRIPTS_GDEXTENSION_IN = open('templates/scripts.gdextension.in', 'r').read()
 CPPSCRIPT_DEFS_H = open('src/cppscript_defs.h').read()
 CPPSCRIPT_BINDINGS_H = open('src/cppscript_bindings.h').read()
 
+PY_CONFIGURE_SCRIPT = replace(PY_CONFIGURE_SCRIPT, [
+            ('@PY_EMBED_TEMPLATE_FILES@',
+            embed_py("REGISTER_TYPES_CPP_IN", REGISTER_TYPES_CPP_IN) + \
+            '    ' + embed_py("REGISTER_TYPES_H_IN", REGISTER_TYPES_H_IN) + \
+            '    ' + embed_py("SCRIPTS_GDEXTENSION_IN", SCRIPTS_GDEXTENSION_IN))
+
+            ]
+        )
+
 open(os.path.join(path, 'godot_cppscript.py'), 'w').write(
     replace(TEMPLATE_SCONS, [
-        ('@PY_EMBED_TEMPLATE_FILES@',
-            '    ' + embed_py("REGISTER_TYPES_CPP_IN", REGISTER_TYPES_CPP_IN) + \
-            '    ' + embed_py("REGISTER_TYPES_H_IN", REGISTER_TYPES_H_IN) + \
-            '    ' + embed_py("SCRIPTS_GDEXTENSION_IN", SCRIPTS_GDEXTENSION_IN)),
         ('@PY_CONFIGURE_SCRIPT@', 
-            '    ' + PY_CONFIGURE_SCRIPT.replace('\n', '\n    ')),
+            PY_CONFIGURE_SCRIPT),
         ('@PY_EMBED_SRC_FILES@',
             embed_py("CPPSCRIPT_DEFS_H", CPPSCRIPT_DEFS_H) + \
             embed_py("CPPSCRIPT_BINDINGS_H", CPPSCRIPT_BINDINGS_H)),
@@ -69,7 +74,7 @@ CMAKE_EMBED_PY_SCRIPT = replace(TEMPLATE_CMAKE, [
 open(os.path.join(path, 'godot_cppscript.cmake'), 'w').write(
     replace(CMAKE_MODULE, [
         ('@CMAKE_EMBED_CONFIGURE_SCRIPT@',
-         embed_cmake('PY_CONFIGURE_SCRIPT', PY_CONFIGURE_SCRIPT)),
+         embed_cmake('PY_CONFIGURE_SCRIPT', PY_CONFIGURE_SCRIPT.replace('\n    ', '\n')[4:])),
         ('@CMAKE_EMBED_SRC_FILES@',
             embed_cmake("CPPSCRIPT_DEFS_H", CPPSCRIPT_DEFS_H) + \
             embed_cmake("CPPSCRIPT_BINDINGS_H", CPPSCRIPT_BINDINGS_H) + \
