@@ -175,7 +175,6 @@ if __name__ != '__main__':
 				return target + [env.File(bindings), env.File(defs), env.File(godotcpp)], source
 
 			def generate(target, source, env):
-				print("REGENERATED HEADERS")
 				with open(bindings, 'w') as file:
 					file.write(CPPSCRIPT_BINDINGS_H)
 				with open(defs, 'w') as file:

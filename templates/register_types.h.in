@@ -4,6 +4,8 @@
 
 #include <godot_cpp/core/class_db.hpp>
 
+#include "scripts.gen.h"
+
 void initialize_@LIBRARY_NAME@_module(godot::ModuleInitializationLevel p_level);
 void initialize_@LIBRARY_NAME@_module(godot::ModuleInitializationLevel p_level);
 

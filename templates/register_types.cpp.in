@@ -6,7 +6,6 @@
 
 // Include custom headers here
 
-#include "scripts.gen.h"
 #include "register_types.h"
 
 using namespace godot;
