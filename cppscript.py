@@ -130,10 +130,6 @@ class code_format_cppscript_constexr_checks(code_format_godot_cpp):
 	VARARG_REGISTER = '\tMethod<&{0}::{1}>::bind_vararg("{2}"{3});\n'
 
 
-CODE_FORMAT = code_format_godot_cpp() \
-	if os.getenv("CPPSCRIPT_NO_CONSTEXPR_CHECKS", False) \
-		else code_format_cppscript_constexr_checks() 
-
 ###################
 
 if __name__ != '__main__':
@@ -155,22 +151,28 @@ if __name__ != '__main__':
 		def __call__(self, env, source, call_args, cwd = os.getcwd(), *args, **kwargs):
 			cppscript_env, *other = call_args
 			# Convert scons variables to cppscript's env
-			env['cppscript_env'] = {
+			cppscript_env = {
 				'header_name' : cppscript_env['header_name'],
 				'header_dir' : resolve_path(str(cppscript_env['header_dir']), cwd),
 				'gen_dir' : resolve_path(str(cppscript_env['gen_dir']), cwd),
 				'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in cppscript_env.get('compile_defs', [])},
 				'include_paths' : {resolve_path(str(i), cwd) for i in [cppscript_env['header_dir']] + cppscript_env.get('include_paths', [])},
-				'auto_methods' : cppscript_env['auto_methods']
+				'auto_methods' : cppscript_env['auto_methods'],
+				'code_format' : code_format_godot_cpp()
+					if os.getenv("CPPSCRIPT_NO_CONSTEXPR_CHECKS", False)
+					else code_format_cppscript_constexr_checks()
 				}
+			env['cppscript_env'] = cppscript_env
 
-			header_path = env['cppscript_env']['header_dir']
 
 			# Generate embedded headers once
+			header_path = cppscript_env['header_dir']
+
 			bindings = os.path.join(header_path, 'cppscript_bindings.h')
 			defs = os.path.join(header_path, 'cppscript_defs.h')
+			godotcpp = os.path.join(header_path, cppscript_env['header_name'])
 			def generate_emitter(target, source, env):
-				return target + [env.File(bindings), env.File(defs)], source
+				return target + [env.File(bindings), env.File(defs), env.File(godotcpp)], source
 
 			def generate(target, source, env):
 				print("REGENERATED HEADERS")
@@ -178,6 +180,8 @@ if __name__ != '__main__':
 					file.write(CPPSCRIPT_BINDINGS_H)
 				with open(defs, 'w') as file:
 					file.write(CPPSCRIPT_DEFS_H)
+				with open(godotcpp, 'w') as file:
+					file.write(cppscript_env['code_format'].CPPSCRIPT_BODY.format(cppscript_env['header_name'].replace(' ', '_').replace('.', '_').upper()))
 			
 			generator = Builder(action=generate, emitter=generate_emitter)(env)
 			builder = self.builder(env, source=source, *other, *args, **kwargs)
@@ -392,12 +396,6 @@ def generate_header(source, env, get_file):
 		shutil.move(prop_file_name, prop_file_name + '.tmp')
 	except:
 		pass
-
-	# Create include header if not exists
-	path = os.path.join(env['header_dir'], env['header_name'])
-	if not os.path.exists(path):
-		with open(path, 'w') as file:
-			file.write(CODE_FORMAT.CPPSCRIPT_BODY.format(env['header_name'].replace(' ', '_').replace('.', '_').upper()))
 
 	try:
 		defs_file_path = os.path.join(env['gen_dir'], 'defs.json')
@@ -744,6 +742,7 @@ def parse_and_write_header(index, filename, filecontent, env):
 
 
 def write_header(file, defs, env):
+	CODE_FORMAT = env['code_format']
 	header_defs = []
 	global_variables = []
 	for class_name_full, content in defs.items():
@@ -925,6 +924,7 @@ def write_header(file, defs, env):
 
 
 def write_register_header(defs_all, env):
+	CODE_FORMAT = env['code_format']
 	target = os.path.join(env['header_dir'], 'scripts.gen.h')
 	scripts_header = CODE_FORMAT.DONOTEDIT_MSG
 	classes_register_levels = {name[12:] : [] for name in INIT_LEVELS}
@@ -1046,6 +1046,7 @@ def write_register_header(defs_all, env):
 
 
 def write_property_header(new_defs, env):
+	CODE_FORMAT = env['code_format']
 	filepath = os.path.join(env['header_dir'], 'properties.gen.h')
 	body = CODE_FORMAT.DONOTEDIT_MSG
 	for filename, filecontent in new_defs['files'].items():
