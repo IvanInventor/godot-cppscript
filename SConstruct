@@ -1,6 +1,5 @@
 import os, sys
-sys.path.append('external/cppscript')
-from cppscript import create_cppscript_target, GlobRecursive
+from external.cppscript.godot_cppscript import create_cppscript_target, GlobRecursive
 
 # Customize this values depending on your project
 library_name = 'scripts'
@@ -53,7 +52,7 @@ generated = create_cppscript_target(
 		#'include_paths' : env['CPPPATH']
 		}
 )
-
+env.Append(CPPPATH=SRC_DIR)
 ###############################
 
 if env["platform"] == "macos":
