@@ -1,3 +1,4 @@
+
 [configuration]
 
 entry_symbol = "scripts_library_init"
@@ -22,3 +23,4 @@ android.release.x86_64 = "res://../bin/libscripts.android.template_release.x86_6
 android.debug.arm64 = "res://../bin/libscripts.android.template_debug.arm64.so"
 android.release.arm64 = "res://../bin/libscripts.android.template_release.arm64.so"
 web.debug.wasm32 = "res://../bin/libscripts.web.template_debug.wasm32.wasm"
+

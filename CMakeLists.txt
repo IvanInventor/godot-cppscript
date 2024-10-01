@@ -80,37 +80,47 @@ file(GLOB_RECURSE CPPSCRIPT_HEADERS src/*.hpp)
 
 # Call function to configure your target
 create_cppscript_target(
-	# Name of your main target
-	${PROJECT_NAME}
-
-	# Header files to parse (.hpp only)
-	"${CPPSCRIPT_HEADERS}"
-
 	# Name of header to be included to enable cppscript
 	# (Prefer name unique to your project)
-	cppscript.h
+	HEADER_NAME
+		cppscript.h
+
+	# Header files to parse (.hpp only)
+	HEADERS_LIST
+		${CPPSCRIPT_HEADERS}
 
 	# FULL PATH to C++ header files
+	HEADERS_DIR
 	${CMAKE_CURRENT_SOURCE_DIR}/src
-
-	# FULL PATH to generated object files
-	${CMAKE_CURRENT_SOURCE_DIR}/.gen
-
+	
+	# Variable name for generated sources list
+	OUTPUT_SOURCES
+		GEN_SOURCES
 	# Generate bindings to public methods automatically
 	# or require GMETHOD() before methods
-	ON
+	AUTO_METHODS
 
 	# Optional
 
 	# C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
 	# Enable, if you conditionally enable classes/members
 	# based on definitions
-	"" # $<TARGET_PROPERTY:godot-cpp,COMPILE_DEFINITIONS>
+	#
+	 COMPILE_DEFS
+	 	$<TARGET_PROPERTY:${PROJECT_NAME},COMPILE_DEFINITIONS>
 
 	# Include paths
 	# (Try to avoid godot-cpp headers paths,
 	# it slows parsing drastically)
-	"" # $<TARGET_PROPERTY:${PROJECT_NAME},INCLUDE_DIRECTORIES>
+	#
+	# INCLUDE_PATHS
+	# 	$<TARGET_PROPERTY:${PROJECT_NAME},INCLUDE_DIRECTORIES>
+)
+# Add sources 
+target_sources(${PROJECT_NAME} PRIVATE ${GEN_SOURCES})
+# Include headers path (if not already done)
+target_include_directories(${PROJECT_NAME} PRIVATE
+	src
 )
 ###############################
 
