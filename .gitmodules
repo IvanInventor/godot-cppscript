@@ -1,7 +1,7 @@
 [submodule "external/godot-cpp"]
 	path = external/godot-cpp
 	url = https://github.com/IvanInventor/godot-cpp
-	branch = cmake-rewrite
+	branch = cmake-rewrite-test
 [submodule "external/cppscript"]
 	path = external/cppscript
 	url = https://github.com/IvanInventor/godot-cppscript
