@@ -1,6 +1,6 @@
 # TEMPORARILY works only on top of my godot-cpp Cmake rewrite
 cmake_minimum_required(VERSION 3.13)
-project(gdexample LANGUAGES CXX)
+project(scripts LANGUAGES CXX)
 
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo;MinSizeRel")
 
