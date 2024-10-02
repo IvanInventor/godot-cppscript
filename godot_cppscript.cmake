@@ -178,21 +178,22 @@ exit(0)
 )
 
 
-	 # Pass args to python config script
-	 math(EXPR ARGC "${CMAKE_ARGC} - 1")
-	 foreach(i RANGE 3 ${ARGC})
-		 list(APPEND ARGS "${CMAKE_ARGV${i}}")
-	 endforeach()
+	# Pass args to python config script
+	math(EXPR ARGC "${CMAKE_ARGC} - 1")
+	foreach(i RANGE 3 ${ARGC})
+		list(APPEND ARGS "${CMAKE_ARGV${i}}")
+	endforeach()
 
-    execute_process(
-        COMMAND
-            "${Python3_EXECUTABLE}"
-				"-c"
-				"${PY_CONFIGURE_SCRIPT}"
-				${ARGS}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-
+	set(SCRIPT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/.configure_script.py.tmp")
+	file(WRITE ${SCRIPT_PATH} "${PY_CONFIGURE_SCRIPT}")
+   execute_process(
+      COMMAND
+         "${Python3_EXECUTABLE}"
+			"${SCRIPT_PATH}"
+			${ARGS}
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+   )
+	file(REMOVE ${SCRIPT_PATH})
 
 else()
 
@@ -1578,8 +1579,11 @@ if __name__ == \"__main__\":
         'gen_dir' : args.gen_dir[0],
         'compile_defs' : set(args.definitions),
         'include_paths' :  set(args.include_paths),
-        'auto_methods' : args.auto_methods
-    }
+        'auto_methods' : args.auto_methods,
+        'code_format' : code_format_godot_cpp()
+            if os.getenv(\"CPPSCRIPT_NO_CONSTEXPR_CHECKS\", False)
+            else code_format_cppscript_constexr_checks()
+        }
 
     sys.exit(generate_header_cmake(args.sources, env))
 
@@ -1587,22 +1591,44 @@ if __name__ == \"__main__\":
 )
 
 
-#TODO: script path is changed to generated one
-set(CMAKE_CURRENT_FUNCTION_LIST_DIR ${CMAKE_CURRENT_LIST_DIR})
 
 #TODO: make it work in parallel
-function(create_cppscript_target TARGET_NAME HEADERS_LIST HEADER_NAME HEADERS_DIR GEN_DIR AUTO_METHODS COMPILE_DEFS INCLUDE_PATHS)
-    #TODO: cmake_parse_args
-	# Handle empty/NOTFOUND lists
-	if(NOT INCLUDE_PATHS)
-		set(INCLUDE_PATHS "")
-	endif()
-	if(NOT COMPILE_DEFS)
-		set(COMPILE_DEFS "")
+function(create_cppscript_target)
+	set(options AUTO_METHODS)
+	set(oneValueArgs HEADER_NAME HEADERS_DIR GEN_DIR OUTPUT_SOURCES)
+	set(multiValueArgs HEADERS_LIST COMPILE_DEFS INCLUDE_PATHS)
+	cmake_parse_arguments(CPPS "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+	# Handle required args and empty/NOTFOUND lists
+	if(NOT CPPS_HEADER_NAME)
+		message(FATAL_ERROR "Header name is required argument (for example: `HEADER_NAME project_name.h`)")
 	endif()
 
+	if(NOT CPPS_HEADERS_DIR)
+		message(FATAL_ERROR "Headers directory is required argument (for example: `HEADERS_DIR \${CMAKE_CURRENT_SOURCE_DIR}/include`)")
+	endif()
+	
+	if(NOT CPPS_OUTPUT_SOURCES)
+		message(FATAL_ERROR "Output sources is required argument (for example: `OUTPUT_SOURCES GEN_SOURCES`)")
+	endif()
 
-	if(${AUTO_METHODS})
+	if(NOT CPPS_GEN_DIR)
+		set(CPPS_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/.cppscript.gen")
+	endif()
+	
+	if(NOT CPPS_HEADERS_LIST)
+		set(CPPS_HEADERS_LIST "")
+	endif()
+	
+	if(NOT CPPS_COMPILE_DEFS)
+		set(CPPS_COMPILE_DEFS "")
+	endif()
+	
+	if(NOT CPPS_INCLUDE_PATHS)
+		set(CPPS_INCLUDE_PATHS "")
+	endif()
+
+	if(CPPS_AUTO_METHODS)
 		set(AUTO_METHODS_STR "True")
 	else()
 		set(AUTO_METHODS_STR "False")
@@ -1610,46 +1636,44 @@ function(create_cppscript_target TARGET_NAME HEADERS_LIST HEADER_NAME HEADERS_DI
 
     # Generate python script and headers
     set(GODOT_CPPSCRIPT_PY_SCRIPT_PATH "${CMAKE_CURRENT_BINARY_DIR}/cppscript.py")
-    set(GODOT_CPPSCRIPT_DEFS_H_PATH "${HEADERS_DIR}/cppscript_defs.h")
-    set(GODOT_CPPSCRIPT_BINDINGS_H_PATH "${HEADERS_DIR}/cppscript_bindings.h")
+	 set(GODOT_CPPSCRIPT_DEFS_H_PATH "${CPPS_HEADERS_DIR}/cppscript_defs.h")
+    set(GODOT_CPPSCRIPT_BINDINGS_H_PATH "${CPPS_HEADERS_DIR}/cppscript_bindings.h")
 
     file(WRITE "${GODOT_CPPSCRIPT_PY_SCRIPT_PATH}" "${CPPSCRIPT_EMBED_PY_SCRIPT}")
     file(WRITE "${GODOT_CPPSCRIPT_DEFS_H_PATH}" "${CPPSCRIPT_DEFS_H}")
     file(WRITE "${GODOT_CPPSCRIPT_BINDINGS_H_PATH}" "${CPPSCRIPT_BINDINGS_H}")
-	foreach(PATH ${HEADERS_LIST})
-		file(RELATIVE_PATH PATH "${HEADERS_DIR}" "${PATH}")
+
+	foreach(PATH ${CPPS_HEADERS_LIST})
+		file(RELATIVE_PATH PATH "${CPPS_HEADERS_DIR}" "${PATH}")
 		string(REGEX REPLACE "\.[^./\\]+$" ".gen.cpp" relative_path "${PATH}")
-		list(APPEND SOURCES_LIST "${GEN_DIR}/${relative_path}")
+		list(APPEND SOURCES_LIST "${CPPS_GEN_DIR}/${relative_path}")
 	endforeach()
 
 	add_custom_command(
 		OUTPUT
-			${HEADERS_DIR}/${HEADER_NAME}
-			${HEADERS_DIR}/scripts.gen.h
-			${HEADERS_DIR}/properties.gen.h
+			${CPPS_HEADERS_DIR}/${CPPS_HEADER_NAME}
+			${CPPS_HEADERS_DIR}/scripts.gen.h
+			${CPPS_HEADERS_DIR}/properties.gen.h
 			${SOURCES_LIST}
 
 		COMMAND
-			${Python3_EXECUTABLE} "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/cppscript_bindings.py"
-			"--header-name" "${HEADER_NAME}"
-			"--header-dir" "${HEADERS_DIR}"
-			"--gen-dir" "${GEN_DIR}"
-			"--auto-methods" "${AUTO_METHODS_STR}"
-			"--definitions" ${COMPILE_DEFS}
-			"--include-paths" ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/src ${HEADERS_DIR} ${INCLUDE_PATHS}
-			"--"
-			${HEADERS_LIST}
+			${Python3_EXECUTABLE} "${GODOT_CPPSCRIPT_PY_SCRIPT_PATH}"
+				"--header-name" "${CPPS_HEADER_NAME}"
+				"--header-dir" "${CPPS_HEADERS_DIR}"
+				"--gen-dir" "${CPPS_GEN_DIR}"
+				"--auto-methods" "${AUTO_METHODS_STR}"
+				"--definitions" ${CPPS_COMPILE_DEFS}
+				"--include-paths" ${CPPS_HEADERS_DIR} ${CPPS_INCLUDE_PATHS}
+				"--"
+				${CPPS_HEADERS_LIST}
 
-		DEPENDS ${HEADERS_LIST}
-		WORKING_DIRECTORY ${CMAKE_CURRENT_FUNCTION_LIST_DIR}
+		DEPENDS ${CPPS_HEADERS_LIST}
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		VERBATIM
 		COMMAND_EXPAND_LISTS
 		COMMENT "Parsing header files..."
 	)
-
-	target_sources(${TARGET_NAME} PRIVATE ${SOURCES_LIST})
-	target_include_directories(${TARGET_NAME} PUBLIC ${CMAKE_CURRENT_FUNCTION_LIST_DIR}/src ${HEADERS_DIR})
+	set(${CPPS_OUTPUT_SOURCES} "${SOURCES_LIST}" PARENT_SCOPE)
 endfunction()
-
 
 endif()
