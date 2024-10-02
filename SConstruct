@@ -44,7 +44,7 @@ generated = create_cppscript_target(
 		## C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
 		## Enable, if you conditionally enable classes/members
 		## based on definitions
-		#'compile_defs' : env['CPPDEFINES'],
+		'compile_defs' : env['CPPDEFINES'],
 		#
 		## Include paths
 		## (Try to avoid godot-cpp headers paths,
@@ -52,6 +52,8 @@ generated = create_cppscript_target(
 		#'include_paths' : env['CPPPATH']
 		}
 )
+
+# Include headers path (if not done already)
 env.Append(CPPPATH=SRC_DIR)
 ###############################
 

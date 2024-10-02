@@ -121,11 +121,12 @@ create_cppscript_target(
 
 	# FULL PATH to C++ header files
 	HEADERS_DIR
-	${CMAKE_CURRENT_SOURCE_DIR}/src
+		${CMAKE_CURRENT_SOURCE_DIR}/src
 	
 	# Variable name for generated sources list
 	OUTPUT_SOURCES
 		GEN_SOURCES
+
 	# Generate bindings to public methods automatically
 	# or require GMETHOD() before methods
 	AUTO_METHODS
@@ -146,9 +147,11 @@ create_cppscript_target(
 	# INCLUDE_PATHS
 	# 	$<TARGET_PROPERTY:${PROJECT_NAME},INCLUDE_DIRECTORIES>
 )
-# Add sources 
+
+# Add sources to your target
 target_sources(${PROJECT_NAME} PRIVATE ${GEN_SOURCES})
-# Include headers path (if not already done)
+
+# Include headers path (if not done already)
 target_include_directories(${PROJECT_NAME} PRIVATE
 	src
 )
