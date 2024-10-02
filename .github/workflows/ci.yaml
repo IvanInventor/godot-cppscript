@@ -194,7 +194,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.12'
 
       - name: Install cppscript dependencies
         run: |
@@ -291,7 +291,7 @@ jobs:
           $GODOT --headless --version
           # Need to run the editor so .godot is generated... but it crashes! Ignore that :-)
           (cd project && (timeout 30 $GODOT --import --headless >/dev/null 2>&1 || true))
-          ./run-tests.sh
+          ./run_tests.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
