@@ -253,7 +253,7 @@ jobs:
         if: ${{ matrix.builder.name == 'SCons' }}
         uses: ./.github/actions/godot-cache-save
         with:
-          cache-name: ${{ matrix.builder.cache-name }}
+          cache-name: ${{ matrix.platform.cache-name }}
         continue-on-error: true
 
       - name: Download latest Godot artifacts
