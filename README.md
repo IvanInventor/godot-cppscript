@@ -21,61 +21,105 @@ libclang
 pip install libclang
 ```
 
-## Installation as project submodule
+# Installation
 
-### Recommended project layout
-```
-/                   project root
-├── project 		godot project root (res://)
-├── bin             compiled binaries
-├── external        submodules
-│   ├── cppscript
-│   └── godot-cpp
-└── src             C++ source files
- ```
-
-#
-### Installation
-
-#### From zero
+### From zero
 Install template from [here](https://github.com/IvanInventor/godot-cppscript-template).
 
-#### To existing project
-- From root of your project
-```bash
-git submodule add https://github.com/IvanInventor/godot-cppscript external/cppscript
-git submodule update --init external/cppscript
-```
+##
+### To existing project
+Copy `godot_cppscript.*` to your project
+- `godot_cppscript.py` for SCons
+
+    ***OR***
+  
+- `godot_cppscript.cmake` for CMake
+
+    ***OR***
+  
+- Setup git submodule from root of your project
+
+  Recommended project layout
+  ```
+  /                   project root
+  ├── project 	    godot project root (res://)
+  ├── bin             compiled binaries
+  ├── external        submodules
+  │   ├── cppscript
+  │   └── godot-cpp
+  ├── src             C++ source files
+  └── include         (optional) separated header files
+   ```
+
+  ```bash
+  $ git submodule add https://github.com/IvanInventor/godot-cppscript external/cppscript
+  $ git submodule update --init external/cppscript
+  ```
 ##### Generate files
-- Copy and modify some files (library_name = 'scripts')
-  - By script
-    - With cmake
-    ```bash
-    # Usage:
-    # cmake -P external/cppscript/cppscript-configure.cmake <library_name> <src_dir> <project_dir>
-    cmake -P external/cppscript/cppscript-configure.cmake scripts src/ project/
-    ```
-   	OR
+Once per project, need to copy/modify some files (library_name = 'scripts', for example)
+  - `.gdextension` file
+  - `register_types.cpp`
+  - `register_types.h`
+
+Don't worry, you will still be able to add custom code to this files after configuring
+
+- By script
     - With Python
     ```bash
     # Usage:
-    # python3 external/cppscript/cppscript-configure.py <library_name> <src_dir> <project_dir>
-    python3 external/cppscript/cppscript-configure.py scripts src/ project/
+    # python3 path/to/godot_cppscript.py
+    # <library_name>              (`my_library_name`)
+    # <cpp_file_path>             (`src/register_types.cpp`)
+    # <header_file_path>          (`include/register_types.h`)
+    # <gdextension_file_path>     (`project/my_library.gdextension`)
+    $ python3 godot_cppscript.py scripts src/register_types.cpp src/register_types.h project/scripts.gdextension
+    These files will be affected:
+        (Override) project/scripts.gdextension
+        (Override) src/register_types.cpp
+        (Override) src/register_types.h
+
+    Are you sure? (Y/N) Y
+    Configuring 'project/scripts.gdextension' ...
+    Configuring 'src/register_types.cpp' ...
+    Configuring 'src/register_types.h' ...
+    Files configured.
     ```
-  	OR
+        
+    ***OR***
+  
+  - With cmake
+    ```bash
+    # Usage:
+    # cmake -P path/to/godot_cppscript.cmake
+    # <library_name>              (`my_library_name`)
+    # <cpp_file_path>             (`src/register_types.cpp`)
+    # <header_file_path>          (`include/register_types.h`)
+    # <gdextension_file_path>     (`project/my_library.gdextension`)
+    $ cmake -P godot_cppscript.cmake scripts src/register_types.cpp src/register_types.h project/scripts.gdextension
+    These files will be affected:
+        (Override) project/scripts.gdextension
+        (Override) src/register_types.cpp
+        (Override) src/register_types.h
+
+    Are you sure? (Y/N) Y
+    Configuring 'project/scripts.gdextension' ...
+    Configuring 'src/register_types.cpp' ...
+    Configuring 'src/register_types.h' ...
+    Files configured.
+    ```
+
+    ***OR***
+  
   - By hand, replacing `@LIBRARY_NAME@` in files with you library name
-    - [templates/scripts.gdextension.in](/templates/scripts.gdextension.in) -> project/<library_name>.gdextension
-    - [templates/register_types.cpp.in](/templates/register_types.cpp.in) -> src/register_types.cpp
-    - [templates/register_types.h.in](/templates/register_types.h.in) -> src/register_types.h
+    - [templates/scripts.gdextension.in](https://github.com/IvanInventor/godot-cppscript/blob/next/templates/scripts.gdextension.in) -> project/<library_name>.gdextension
+    - [templates/register_types.cpp.in](https://github.com/IvanInventor/godot-cppscript/blob/next/templates/register_types.cpp.in) -> src/register_types.cpp
+    - [templates/register_types.h.in](https://github.com/IvanInventor/godot-cppscript/blob/next/templates/register_types.h.in) -> src/register_types.h
 
 - Create cppscript target in your build script
   - SCons
   ```python
-  # import module
-  import sys
-  sys.path.append('external/cppscript')
-  from cppscript import create_cppscript_target
-  from cppscript import GlobRecursive # Optional
+  from godot_cppscript import create_cppscript_target
+  from godot_cppscript import GlobRecursive # Optional
 
   # ...
 
@@ -108,7 +152,7 @@ git submodule update --init external/cppscript
   		## C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
   		## Enable, if you conditionally enable classes/members
   		## based on definitions
-  		#'compile_defs' : env['CPPDEFINES'],
+  		'compile_defs' : env['CPPDEFINES'],
   		#
   		## Include paths
   		## (Try to avoid godot-cpp headers paths,
@@ -117,6 +161,9 @@ git submodule update --init external/cppscript
   		}
   )
   
+  # Include headers path (if not done already)
+  env.Append(CPPPATH='src')
+
   # Your project's target generation
   # You only need to modify it
   if env["platform"] == "macos":
@@ -140,48 +187,58 @@ git submodule update --init external/cppscript
   
   - Cmake
   ```cmake
-  # Include module
-  list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/cppscript")
-  include(godot-cppscript)
+  include(${CMAKE_CURRENT_SOURCE_DIR}/godot_cppscript.cmake)
   
   # Get header files (Prefer .hpp files)
   file(GLOB_RECURSE CPPSCRIPT_HEADERS src/*.hpp)
   
-  # Call function to configure your target
+  # Call function to create cppscript target
   create_cppscript_target(
-  	# Name of your main target
-  	${PROJECT_NAME}
-  
-  	# Header files to parse
-  	"${CPPSCRIPT_HEADERS}"
-  
   	# Name of header to be included to enable cppscript
   	# (Prefer name unique to your project)
-  	cppscript.h
+  	HEADER_NAME
+  		cppscript.h
+  
+  	# Header files to parse (.hpp only)
+  	HEADERS_LIST
+  		${CPPSCRIPT_HEADERS}
   
   	# FULL PATH to C++ header files
-  	${CMAKE_CURRENT_SOURCE_DIR}/src
-  
-  	# FULL PATH to generated object files
-  	${CMAKE_CURRENT_SOURCE_DIR}/.gen
+  	HEADERS_DIR
+  		${CMAKE_CURRENT_SOURCE_DIR}/src
+  	
+  	# Variable name for generated sources list
+  	OUTPUT_SOURCES
+  		GEN_SOURCES
   
   	# Generate bindings to public methods automatically
   	# or require GMETHOD() before methods
-  	ON
+  	AUTO_METHODS
   
   	# Optional
   
   	# C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
   	# Enable, if you conditionally enable classes/members
   	# based on definitions
-  	"" # $<TARGET_PROPERTY:godot-cpp,COMPILE_DEFINITIONS>
+  	#
+  	 COMPILE_DEFS
+  	 	$<TARGET_PROPERTY:${PROJECT_NAME},COMPILE_DEFINITIONS>
   
   	# Include paths
   	# (Try to avoid godot-cpp headers paths,
   	# it slows parsing drastically)
-  	"" # $<TARGET_PROPERTY:${PROJECT_NAME},INCLUDE_DIRECTORIES>
+  	#
+  	# INCLUDE_PATHS
+  	# 	$<TARGET_PROPERTY:${PROJECT_NAME},INCLUDE_DIRECTORIES>
   )
-
+  
+  # Add sources to your target
+  target_sources(${PROJECT_NAME} PRIVATE ${GEN_SOURCES})
+  
+  # Include headers path (if not done already)
+  target_include_directories(${PROJECT_NAME} PRIVATE
+  	src
+  )
   ```
 
 ## Usage example
