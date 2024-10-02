@@ -24,8 +24,11 @@ if __name__ == "__main__":
         'gen_dir' : args.gen_dir[0],
         'compile_defs' : set(args.definitions),
         'include_paths' :  set(args.include_paths),
-        'auto_methods' : args.auto_methods
-    }
+        'auto_methods' : args.auto_methods,
+        'code_format' : code_format_godot_cpp()
+            if os.getenv("CPPSCRIPT_NO_CONSTEXPR_CHECKS", False)
+            else code_format_cppscript_constexr_checks()
+        }
 
     sys.exit(generate_header_cmake(args.sources, env))
 
