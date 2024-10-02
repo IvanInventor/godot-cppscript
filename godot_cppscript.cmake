@@ -1,6 +1,8 @@
-cmake_minimum_required(VERSION 3.6)
+# THIS FILE IS AUTO-GENERATED
+# See `https://github.com/IvanInventor/godot-cppscript/tree/next` for proper source
+cmake_minimum_required(VERSION 3.12.4)
 
-find_package(Python3 3.4 REQUIRED)
+find_package(Python3 3.10 REQUIRED)
 
 if(CMAKE_SCRIPT_MODE_FILE)
     # Ran as configure script
