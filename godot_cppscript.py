@@ -194,19 +194,19 @@ private:
 #define GABSTRACT_CLASS(CLASS_NAME, CLASS_NAME_INH) GCLASS(CLASS_NAME, CLASS_NAME_INH)
 #define GINTERNAL_CLASS(CLASS_NAME, CLASS_NAME_INH) GCLASS(CLASS_NAME, CLASS_NAME_INH)
 
-#define GENERATE_GETTER_DECLARATION(function, property)	\\
-decltype(property) function();
+#define GENERATE_GETTER_DECLARATION(function, prop_type)	\\
+prop_type function();
 
-#define GENERATE_SETTER_DECLARATION(function, property)	\\
-void function(decltype(property));
+#define GENERATE_SETTER_DECLARATION(function, prop_type)	\\
+void function(prop_type);
 
-#define GENERATE_GETTER(function, property)	\\
-decltype(property) function() {			\\
+#define GENERATE_GETTER(function, property, prop_type)	\\
+prop_type function() {			\\
 	return property;			\\
 }
 
-#define GENERATE_SETTER(function, property)	\\
-void function(decltype(property) value) {	\\
+#define GENERATE_SETTER(function, property, prop_type)	\\
+void function(prop_type value) {	\\
 	this->property = value;			\\
 }
 
@@ -540,16 +540,16 @@ struct StaticAccess {{
 	}}
 """
 
-	# (class_name_full, method_name, property_name)
-	GENERATE_GETTER = 'GENERATE_GETTER({0}::{1}, {0}::{2});\n'
+	# (class_name_full, method_name, property_name, property_type)
+	GENERATE_GETTER = 'GENERATE_GETTER({0}::{1}, {0}::{2}, {3});\n'
 
-	# (method_name, property_name)
+	# (method_name, property_type)
 	GENERATE_GETTER_DECLARATION = 'GENERATE_GETTER_DECLARATION({0}, {1})'
 
-	# (class_name_full, method_name, property_name)
-	GENERATE_SETTER = 'GENERATE_SETTER({0}::{1}, {0}::{2});\n'
+	# (class_name_full, method_name, property_name, property_type)
+	GENERATE_SETTER = 'GENERATE_SETTER({0}::{1}, {0}::{2}, {3});\n'
  	
-	# (method_name, property_name)
+	# (method_name, property_type)
 	GENERATE_SETTER_DECLARATION = 'GENERATE_SETTER_DECLARATION({0}, {1})'
 
 	# (group_name, groug_name_expanded)
@@ -835,6 +835,17 @@ def is_virtual_method(cursor):
 	return False
 
 
+def cursor_get_field_type(cursor):
+	spelling = cursor.spelling
+	tokens = list(cursor.get_tokens())
+	for i in range(len(tokens)):
+		if tokens[i].kind == TokenKind.IDENTIFIER and tokens[i].spelling == spelling:
+			return ''.join(t.spelling for t in tokens[:i])
+
+	raise CppScriptException('{}:{}:{}: error: cannot extract type from property "{}"'
+	.format(cursor.location.file.name, cursor.location.line, cursor.location.column, cursor.spelling))
+
+
 # Builder
 def generate_header_emitter(target, source, env):
 	generated = [env.File(filename_to_gen_filename(str(i), env['cppscript_env'])) for i in source]
@@ -929,6 +940,9 @@ def parse_header(index, filename, filecontent, env):
 					class_cursors.append(cursor)
 
 				case CursorKind.FIELD_DECL:
+					print(f"Cursor '{cursor.spelling}'")
+					print(f"Type '{cursor.type.spelling}'")
+					print([(i.kind, i.spelling) for i in cursor.get_tokens()])
 					class_cursors.append(cursor)
 
 				case CursorKind.ENUM_DECL:
@@ -1185,6 +1199,7 @@ def parse_header(index, filename, filecontent, env):
 					if process_macros(item, macros, properties, True):
 						properties |= {
 							'name': item.spelling,
+							'type' : cursor_get_field_type(item),
 							'group' : group,
 							'subgroup' : subgroup,
 							'is_static' : item.is_static_method()
@@ -1291,7 +1306,8 @@ def write_header(file, defs, env):
 				property_set_get_defs += CODE_FORMAT.GENERATE_GETTER.format(
 					class_name_full,
 					prop["getter"],
-					prop["name"]
+					prop["name"],
+					prop["type"]
 					)
 				gen_getters.append([prop["getter"], prop["name"]])
 
@@ -1306,7 +1322,8 @@ def write_header(file, defs, env):
 				property_set_get_defs += CODE_FORMAT.GENERATE_SETTER.format(
 					class_name_full,
 					prop["setter"],
-					prop["name"]
+					prop["name"],
+					prop["type"]
 					)
 				gen_setters.append([prop["setter"], prop["name"]])
 
@@ -1526,9 +1543,9 @@ def write_property_header(new_defs, env):
 		classcontent = filecontent['content']
 		for class_name_full, content in classcontent.items():
 			gen_setgets = [
-				' \\\n' + CODE_FORMAT.GENERATE_GETTER_DECLARATION.format(method, property)
+				' \\\n' + CODE_FORMAT.GENERATE_GETTER_DECLARATION.format(method, next(prop['type'] for prop in content['properties'] if prop['name'] == property))
 					for method, property in content['gen_getters']] + [
-				' \\\n' + CODE_FORMAT.GENERATE_SETTER_DECLARATION.format(method, property)
+				' \\\n' + CODE_FORMAT.GENERATE_SETTER_DECLARATION.format(method, next(prop['type'] for prop in content['properties'] if prop['name'] == property))
 					for method, property in content['gen_setters']]
 
 			body += f'#define GSETGET_{content["class_name"]}' + ''.join(gen_setgets) + '\n\n'
