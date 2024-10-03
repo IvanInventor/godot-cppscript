@@ -15,19 +15,19 @@ private:
 #define GABSTRACT_CLASS(CLASS_NAME, CLASS_NAME_INH) GCLASS(CLASS_NAME, CLASS_NAME_INH)
 #define GINTERNAL_CLASS(CLASS_NAME, CLASS_NAME_INH) GCLASS(CLASS_NAME, CLASS_NAME_INH)
 
-#define GENERATE_GETTER_DECLARATION(function, property)	\
-decltype(property) function();
+#define GENERATE_GETTER_DECLARATION(function, prop_type)	\
+prop_type function();
 
-#define GENERATE_SETTER_DECLARATION(function, property)	\
-void function(decltype(property));
+#define GENERATE_SETTER_DECLARATION(function, prop_type)	\
+void function(prop_type);
 
-#define GENERATE_GETTER(function, property)	\
-decltype(property) function() {			\
+#define GENERATE_GETTER(function, property, prop_type)	\
+prop_type function() {			\
 	return property;			\
 }
 
-#define GENERATE_SETTER(function, property)	\
-void function(decltype(property) value) {	\
+#define GENERATE_SETTER(function, property, prop_type)	\
+void function(prop_type value) {	\
 	this->property = value;			\
 }
 
