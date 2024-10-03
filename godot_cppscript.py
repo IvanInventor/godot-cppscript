@@ -619,9 +619,6 @@ if __name__ != '__main__':
 		return env.CppScript(sources, cppscript_env, *args, **kwargs)
 
 	class CppScriptBuilder():
-		def __init__(self):
-			self.builder = Builder(action=generate_header_scons, emitter=generate_header_emitter)
-
 		def __call__(self, env, source, call_args, cwd = os.getcwd(), *args, **kwargs):
 			cppscript_env, *other = call_args
 			# Convert scons variables to cppscript's env
@@ -656,9 +653,18 @@ if __name__ != '__main__':
 				with open(godotcpp, 'w') as file:
 					file.write(cppscript_env['code_format'].CPPSCRIPT_BODY.format(cppscript_env['header_name'].replace(' ', '_').replace('.', '_').upper()))
 			
+			def generate_header_emitter(target, source, env):
+				generated = [env.File(filename_to_gen_filename(str(i), env['cppscript_env'])) for i in source]
+
+				# To avoid generated sources deletion and re-parsing
+				env.Precious(generated)
+
+				return generated, source
+
 			generator = Builder(action=generate, emitter=generate_emitter)(env)
-			builder = self.builder(env, source=source, *other, *args, **kwargs)
-			env.Depends(builder, generator)
+			builder = Builder(action=generate_header_scons, emitter=generate_header_emitter) \
+				(env, source=source, *other, *args, **kwargs)
+			#env.Depends(builder, generator)
 
 			return builder
 
@@ -847,15 +853,6 @@ def cursor_get_field_type(cursor):
 
 
 # Builder
-def generate_header_emitter(target, source, env):
-	generated = [env.File(filename_to_gen_filename(str(i), env['cppscript_env'])) for i in source]
-
-	# To avoid generated sources deletion and re-parsing
-	env.Precious(generated)
-
-	return generated, source
-
-
 def generate_header_scons(target, source, env):
 	if "CPPSCRIPT_DEBUG" in os.environ.keys():
 		print(json.dumps(env['cppscript_env'], indent=2, default=lambda x: list(x) if type(x) is set else x))
