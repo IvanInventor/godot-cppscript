@@ -8,6 +8,8 @@ if not os.path.isdir(path):
     print(f'Prepare worktree with `git worktree add {path} master` first...')
     exit(1)
 
+print(f"Installing to '{path}'")
+
 def replace(fstr, key_value):
     for key, value in key_value:
         fstr = fstr.replace(key, value)
