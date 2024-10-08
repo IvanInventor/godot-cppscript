@@ -30,14 +30,6 @@ else()
 
 @CMAKE_EMBED_SRC_FILES@
 
-set(EMBED_CPPSCRIPT_H "#ifndef @H_GUARD@
-#define @H_GUARD@
-#include <cppscript_defs.h>
-#include \"properties.gen.h\"
-#endif // @H_GUARD@
-"
-)
-
 #TODO: make it work in parallel
 function(create_cppscript_target)
 	set(options AUTO_METHODS)
@@ -92,8 +84,8 @@ function(create_cppscript_target)
 
 	 string(TOUPPER "${CPPS_HEADER_NAME}" H_GUARD_STR)
 	 string(REPLACE "." "_" H_GUARD_STR "${H_GUARD_STR}")
-	 string(REPLACE "@H_GUARD@" "${H_GUARD_STR}" EMBED_CPPSCRIPT_H_FORMATTED "${EMBED_CPPSCRIPT_H}") 
-	 file(WRITE "${GODOT_CPPSCRIPT_H_PATH}" "${EMBED_CPPSCRIPT_H_FORMATTED}")
+	 string(REPLACE "@H_GUARD@" "${H_GUARD_STR}" CPPSCRIPT_BODY_H_FORMATTED "${CPPSCRIPT_BODY_H}") 
+	 file(WRITE "${GODOT_CPPSCRIPT_H_PATH}" "${CPPSCRIPT_BODY_H_FORMATTED}")
 
 	foreach(PATH ${CPPS_HEADERS_LIST})
 		file(RELATIVE_PATH PATH "${CPPS_HEADERS_DIR}" "${PATH}")

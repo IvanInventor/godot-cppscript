@@ -56,7 +56,7 @@ class CppScriptBuilder():
 			with open(defs, 'w') as file:
 				file.write(CPPSCRIPT_DEFS_H)
 			with open(godotcpp, 'w') as file:
-				file.write(cppscript_env['code_format'].CPPSCRIPT_BODY.format(cppscript_env['header_name'].replace(' ', '_').replace('.', '_').upper()))
+				file.write(CPPSCRIPT_BODY_H.replace('@H_GUARD@', cppscript_env['header_name'].replace(' ', '_').replace('.', '_').upper()))
 		
 		def generate_header_emitter(target, source, env):
 			generated = [env.File(filename_to_gen_filename(str(i), env['cppscript_env'])) for i in source]
