@@ -176,6 +176,14 @@ web.debug.wasm32 = "res://../bin/lib@LIBRARY_NAME@.web.template_debug.wasm32.was
     exit(0)
 
 
+CPPSCRIPT_BODY_H = """
+#ifndef @H_GUARD@
+#define @H_GUARD@
+#include "cppscript_defs.h"
+#include "properties.gen.h"
+#endif // @H_GUARD@
+
+"""
 CPPSCRIPT_DEFS_H = """
 #ifndef CPPSCRIPT_HEADER
 #define CPPSCRIPT_HEADER
@@ -517,7 +525,7 @@ class CppScriptBuilder():
 			with open(defs, 'w') as file:
 				file.write(CPPSCRIPT_DEFS_H)
 			with open(godotcpp, 'w') as file:
-				file.write(cppscript_env['code_format'].CPPSCRIPT_BODY.format(cppscript_env['header_name'].replace(' ', '_').replace('.', '_').upper()))
+				file.write(CPPSCRIPT_BODY_H.replace('@H_GUARD@', cppscript_env['header_name'].replace(' ', '_').replace('.', '_').upper()))
 		
 		def generate_header_emitter(target, source, env):
 			generated = [env.File(filename_to_gen_filename(str(i), env['cppscript_env'])) for i in source]
