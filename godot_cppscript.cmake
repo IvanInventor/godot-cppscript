@@ -881,9 +881,6 @@ def parse_header(index, filename, filecontent, env):
 					class_cursors.append(cursor)
 
 				case CursorKind.FIELD_DECL:
-					print(f\"Cursor '{cursor.spelling}'\")
-					print(f\"Type '{cursor.type.spelling}'\")
-					print([(i.kind, i.spelling) for i in cursor.get_tokens()])
 					class_cursors.append(cursor)
 
 				case CursorKind.ENUM_DECL:
