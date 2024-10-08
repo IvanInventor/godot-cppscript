@@ -30,6 +30,13 @@ else()
 
 @CMAKE_EMBED_SRC_FILES@
 
+set(EMBED_CPPSCRIPT_H "#ifndef @H_GUARD@
+#define @H_GUARD@
+#include <cppscript_defs.h>
+#include \"properties.gen.h\"
+#endif // @H_GUARD@
+"
+)
 
 #TODO: make it work in parallel
 function(create_cppscript_target)
@@ -77,10 +84,16 @@ function(create_cppscript_target)
     set(GODOT_CPPSCRIPT_PY_SCRIPT_PATH "${CMAKE_CURRENT_BINARY_DIR}/cppscript.py")
 	 set(GODOT_CPPSCRIPT_DEFS_H_PATH "${CPPS_HEADERS_DIR}/cppscript_defs.h")
     set(GODOT_CPPSCRIPT_BINDINGS_H_PATH "${CPPS_HEADERS_DIR}/cppscript_bindings.h")
+	 set(GODOT_CPPSCRIPT_H_PATH "${CPPS_HEADERS_DIR}/${CPPS_HEADER_NAME}")
 
     file(WRITE "${GODOT_CPPSCRIPT_PY_SCRIPT_PATH}" "${CPPSCRIPT_EMBED_PY_SCRIPT}")
     file(WRITE "${GODOT_CPPSCRIPT_DEFS_H_PATH}" "${CPPSCRIPT_DEFS_H}")
     file(WRITE "${GODOT_CPPSCRIPT_BINDINGS_H_PATH}" "${CPPSCRIPT_BINDINGS_H}")
+
+	 string(TOUPPER "${CPPS_HEADER_NAME}" H_GUARD_STR)
+	 string(REPLACE "." "_" H_GUARD_STR "${H_GUARD_STR}")
+	 string(REPLACE "@H_GUARD@" "${H_GUARD_STR}" EMBED_CPPSCRIPT_H_FORMATTED "${EMBED_CPPSCRIPT_H}") 
+	 file(WRITE "${GODOT_CPPSCRIPT_H_PATH}" "${EMBED_CPPSCRIPT_H_FORMATTED}")
 
 	foreach(PATH ${CPPS_HEADERS_LIST})
 		file(RELATIVE_PATH PATH "${CPPS_HEADERS_DIR}" "${PATH}")
