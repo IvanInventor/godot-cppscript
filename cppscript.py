@@ -849,7 +849,7 @@ def write_header(file, defs, env):
 					os.path.relpath(file, os.path.dirname(gen_filename)).replace('\\', '/'),
 					('\n'.join(global_variables) + '\n\n' if global_variables != [] else ''))
 
-		if has_rpc_config != '':
+		if has_rpc_config:
 			header_include = '#include <godot_cpp/classes/multiplayer_api.hpp>\n' + header_include
 			header_include = '#include <godot_cpp/classes/multiplayer_peer.hpp>\n' + header_include
 
