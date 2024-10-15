@@ -27,8 +27,13 @@ class ExampleRef;
 
 class Example : public Control {
 	// Class with all cppscript features explained
-	// Check end of Example class declaration for
-	// the most important cppscript macro
+
+	// Register your class
+	// Possible class types:
+	// basic class 		GCLASS(name, base_name)
+	// virtual class 	GVIRTUAL_CLASS(name, base_name)
+	// abstract class 	GABSTRACT_CLASS(name, base_name)
+	GCLASS(Example, Control);
 
 
 	// Signal declaration
@@ -48,11 +53,11 @@ class Example : public Control {
 	// If member function with the same name is not declared,
 	// it is generated automatically
 	GPROPERTY(set_custom_position, get_custom_position);
-	Vector2 custom_position; 			// 
-							//
-public:							//	Has custom setter/getter
+	Vector2 custom_position; 								// 
+																	//
+public:															//	Has custom setter/getter
 	void set_custom_position(const Vector2 &pos);	//
-	Vector2 get_custom_position() const;		//
+	Vector2 get_custom_position() const;				//
 private:
 
 	// No custom set/get example
@@ -225,13 +230,6 @@ protected:
 	bool _property_get_revert(const StringName &p_name, Variant &r_property) const;
 
 	String _to_string() const;
-
-	// Register your class
-	// Possible class types:
-	// basic class 		GCLASS(name, base_name)
-	// virtual class 	GVIRTUAL_CLASS(name, base_name)
-	// abstract class 	GABSTRACT_CLASS(name, base_name)
-	GCLASS(Example, Control);
 };
 
 /* Variant casts are generated in binds header
@@ -249,6 +247,7 @@ VARIANT_ENUM_CAST(EnumWithoutClass);
 */
 
 class ExampleRef : public RefCounted {
+	GCLASS(ExampleRef, RefCounted);
 
 private:
 	static int instance_count;
@@ -263,8 +262,6 @@ public:
 
 	void set_id(int p_id);
 	int get_id() const;
-
-	GCLASS(ExampleRef, RefCounted);
 };
 
 class ExampleMin : public Control {
