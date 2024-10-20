@@ -258,6 +258,12 @@ Don't worry, you will still be able to add custom code to this files after confi
 using namespace godot;
 
 class ExampleForRepo : public Control {
+	// Register your class
+	// Possible class types:
+	// basic class 		GCLASS(name, base_name)
+	// virtual class 	GVIRTUAL_CLASS(name, base_name)
+	// abstract class 	GABSTRACT_CLASS(name, base_name)
+	GCLASS(ExampleForRepo, Control);
 
 	// Signals
 	GSIGNAL(example_signal, float typed_arg, untyped_arg);
@@ -367,12 +373,6 @@ public:
 	bool _has_point(const Vector2 &point) const override;
 	void _input(const Ref<InputEvent> &event) override;
 
-	// Register your class
-	// Possible class types:
-	// basic class 		GCLASS(name, base_name)
-	// virtual class 	GVIRTUAL_CLASS(name, base_name)
-	// abstract class 	GABSTRACT_CLASS(name, base_name)
-	GCLASS(ExampleForRepo, Control);
 };
 
 ```
