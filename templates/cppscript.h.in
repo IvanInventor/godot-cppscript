@@ -1,0 +1,5 @@
+#ifndef @H_GUARD@
+#define @H_GUARD@
+#include "cppscript_defs.h"
+#include "properties.gen.h"
+#endif // @H_GUARD@
