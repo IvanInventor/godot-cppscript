@@ -119,13 +119,13 @@ Don't worry, you will still be able to add custom code to this files after confi
   - SCons
   ```python
   from godot_cppscript import create_cppscript_target
-  from godot_cppscript import GlobRecursive # Optional
+  import glob
 
   # ...
 
   # Get list of headers (Prefer *.hpp files)
-  scripts = GlobRecursive('src', '*.hpp')
-  
+  scripts = glob.glob('src/**/*.hpp', recursive=True)
+
   # Create target, returns generated .cpp files list
   generated = create_cppscript_target(
   		env,		# SCons env, env.Clone() for different projects
