@@ -7,20 +7,19 @@ if [ "$MASTER_DIR" == "" ]; then
 	exit 1
 fi
 
-if git diff --cached --quiet; then
-	echo "No changes"
-	exit 0
+if git diff --quiet; then
+	echo "$(pwd): No changes"
 fi
 
 ./generate.py "$MASTER_DIR" || exit 1
 
-git commit -a || exit 1
+git diff --quiet  || git commit -a
 
 REF_SHORT=$(git rev-parse @ | head -c8)
 
 cd "$MASTER_DIR"
-if git diff --cached --quiet ; then
-	echo "Cannot commit to" "'$MASTER_DIR'" ": no changes"
+if git diff --quiet ; then
+	echo "$(pwd): No changes"
 	exit 1
 else
 	git commit -a -m "Sync with $REF_SHORT"
