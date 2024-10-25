@@ -2,7 +2,12 @@
 
 import os, sys
 
-path = sys.argv[1] if len(sys.argv) > 1 else 'master'
+if len(sys.argv) <= 1:
+	print('Usage:', file=sys.stderr)
+	print(f'\t{sys.argv[0]} <master_worktree_path>', file=sys.stderr)
+	exit(1)
+
+path = sys.argv[1]
 
 if not os.path.isdir(path):
     print(f'Prepare worktree with `git worktree add {path} master` first...')

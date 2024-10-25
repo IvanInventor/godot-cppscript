@@ -9,25 +9,25 @@
         h_path = argv[2]
         gdext_path = argv[3]
     except:
-        ABOUT = \
-    '''
-    ERROR: Not enough arguments.
-    Needed arguments (<argument> - example):
-
-    <library_name>              (`my_library_name`)
-    <cpp_file_path>             (`src/register_types.cpp`)
-    <header_file_path>          (`include/register_types.h`)
-    <gdextension_file_path>     (`project/my_library.gdextension`)
-    '''
-        print(ABOUT, file=sys.stderr)
+        print(
+            '',
+            'ERROR: Not enough arguments.',
+            'Needed arguments (<argument> - example):',
+            '',
+            '<library_name>              (`my_library_name`)',
+            '<cpp_file_path>             (`src/register_types.cpp`)',
+            '<header_file_path>          (`include/register_types.h`)',
+            '<gdextension_file_path>     (`project/my_library.gdextension`)',
+            '',
+	        sep='\n', file=sys.stderr)
         exit(1)
 
-    prompt = f'''These files will be affected:
-        {'(New)     ' if not os.path.exists(gdext_path) else '(Override)'} {gdext_path}
-        {'(New)     ' if not os.path.exists(cpp_path) else '(Override)'} {cpp_path}
-        {'(New)     ' if not os.path.exists(h_path) else '(Override)'} {h_path}
-    '''
-    print(prompt)
+    print(
+        'These files will be affected:',
+        f'{"(New)     " if not os.path.exists(gdext_path) else "(Override)"} {gdext_path}',
+        f'{"(New)     " if not os.path.exists(cpp_path) else "(Override)"} {cpp_path}',
+        f'{"(New)     " if not os.path.exists(h_path) else "(Override)"} {h_path}',
+        sep='\n')
     while True:
         inp = input('Are you sure? (Y/N) ')
         if inp == '':

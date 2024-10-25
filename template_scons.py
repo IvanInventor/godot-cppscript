@@ -12,7 +12,6 @@ if __name__ == '__main__':
 @PY_EMBED_SRC_FILES@
 
 # Ran as module from SConstruct
-from SCons.Script import Glob
 from SCons.Builder import Builder
 
 def create_cppscript_target(env, sources, cppscript_env, *args, **kwargs):
@@ -73,17 +72,6 @@ class CppScriptBuilder():
 		#env.Depends(builder, generator)
 
 		return builder
-
-
-def GlobRecursive(path, pattern, **kwargs):
-	found = []
-	for root, dirs, files in os.walk(path):
-		if not os.path.basename(root).startswith('.'):
-			found += Glob(root + '/' + pattern, **kwargs)
-		else:
-			dirs[:] = []
-
-	return found
 
 
 @CPPSCRIPT_PY_MODULE@
