@@ -1,5 +1,5 @@
-import os, sys
-from external.cppscript.godot_cppscript import create_cppscript_target, GlobRecursive
+import glob
+from external.cppscript.godot_cppscript import create_cppscript_target
 
 # Customize this values depending on your project
 library_name = 'scripts'
@@ -8,7 +8,7 @@ GEN_DIR = '.gen'
 
 env = SConscript('external/godot-cpp/SConstruct').Clone()
 
-sources = GlobRecursive(SRC_DIR, '*.cpp')
+sources = glob.glob(f'{SRC_DIR}/**/*.cpp', recursive=True)
 
 env.Append(CXXFLAGS='-fdiagnostics-color=always')
 
@@ -16,7 +16,7 @@ env.Append(CXXFLAGS='-fdiagnostics-color=always')
 # godot-cppscript creation
 
 # Get header files (.hpp only)
-scripts = GlobRecursive(SRC_DIR, '*.hpp')
+scripts = glob.glob(f'{SRC_DIR}/**/*.hpp', recursive=True)
 
 # Create target, returns generated .cpp files list
 generated = create_cppscript_target(
@@ -56,6 +56,10 @@ generated = create_cppscript_target(
 # Include headers path (if not done already)
 env.Append(CPPPATH=SRC_DIR)
 ###############################
+
+if env["target"] in ["editor", "template_debug"]:
+    doc_data = env.GodotCPPDocData("src/gen/doc_data.gen.cpp", source=glob.glob("doc_classes/**/*.xml", recursive=True))
+    sources.append(doc_data)
 
 if env["platform"] == "macos":
     library = env.SharedLibrary(
