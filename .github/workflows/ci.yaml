@@ -44,7 +44,7 @@ jobs:
           - name: CMake
             build_debug: |
               cmake {0} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -B build_debug .
-              cmake --build build_debug --config Debug -v
+              cmake --build build_debug --config RelWithDebInfo -v
 
             build_release: |
               cmake {0} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DGODOT_TARGET=template_release -B build_release .
