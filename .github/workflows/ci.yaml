@@ -53,7 +53,7 @@ jobs:
         platform:
           - name: 🐧 Linux
             description: 'GCC'
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             platform: linux
             artifact-name: libscripts-linux-glibc2.27-x86_64-release
             artifact-path:
@@ -67,7 +67,7 @@ jobs:
 
           - name: 🐧 Linux
             description: 'GCC, Double Precision'
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             platform: linux
             artifact-name: libscripts-linux-glibc2.27-x86_64-double-release
             artifact-path:
@@ -81,7 +81,7 @@ jobs:
 
           - name: 🏁 Windows
             description: 'x86_64, MSVC'
-            os: windows-2019
+            os: windows-2022
             platform: windows
             artifact-name: libscripts-windows-msvc2019-x86_64-release
             artifact-path:
@@ -95,7 +95,7 @@ jobs:
 
           - name: 🏁 Windows
             description: 'x86_64, MinGW'
-            os: windows-2019
+            os: windows-2022
             platform: windows
             artifact-name: libscripts-linux-mingw-x86_64-release
             artifact-path:
@@ -124,7 +124,7 @@ jobs:
 
           - name: 🤖 Android
             description: 'arm64'
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             platform: android
             artifact-name: libscripts-android-arm64-release
             artifact-path:
@@ -152,7 +152,7 @@ jobs:
 
           - name: 🌐 Web
             description: 'wasm32'
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             platform: web
             artifact-name: libscripts-web-wasm32-release
             artifact-path:
