@@ -1,106 +1,70 @@
-# TEMPORARILY works only on top of my godot-cpp Cmake rewrite
+# Configuration based on godot-cpp/test/CMakeLists.txt
 cmake_minimum_required(VERSION 3.13)
 project(scripts LANGUAGES CXX)
 
-set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo;MinSizeRel")
-
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/godot-cpp)
 
-# Get Sources
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.c**)
 file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS src/*.h**)
 
-godot_clear_default_flags()
-
-get_target_property(LIBRARY_SUFFIX godot-cpp LIBRARY_SUFFIX)
-
-if("${GODOT_TARGET}" STREQUAL "editor" OR "${GODOT_TARGET}" STREQUAL "template_debug")
-	set(DOC_GEN_PATH "${CMAKE_CURRENT_SOURCE_DIR}/src/gen/doc_data.gen.cpp")
-	file(GLOB_RECURSE DOC_FILES CONFIGURE_DEPENDS doc_classes/*.xml)
-
-	godot_make_doc(
-		DESTINATION ${DOC_GEN_PATH}
-		SOURCES ${DOC_FILES}
-		COMPRESSION Z_BEST_COMPRESSION
-	)
-	list(APPEND SOURCES ${DOC_GEN_PATH})
-endif()
-
-# Define our godot-cpp library
-if("${GODOT_PLATFORM}" STREQUAL "web")
-	# wasm libraries loaded with dlopen() are created like this in cmake
-	add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
-	set_target_properties(${PROJECT_NAME}
-		PROPERTIES
-			SUFFIX ".wasm"
-			OUTPUT_NAME "${PROJECT_NAME}${LIBRARY_SUFFIX}"
-	)
-elseif("${GODOT_PLATFORM}" STREQUAL "macos")
-	add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
-	set(OUTPUT_NAME "lib${PROJECT_NAME}${LIBRARY_SUFFIX}")
-	set_target_properties(${PROJECT_NAME} PROPERTIES
-		FRAMEWORK TRUE
-		MACOSX_FRAMEWORK_IDENTIFIER "org.godotengine.lib${PROJECT_NAME}"
-		MACOSX_BUNDLE_BUNDLE_NAME "lib${PROJECT_NAME}${LIBRARY_SUFFIX}"
-		MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.0"
-		MACOS_BUNDLE_BUNDLE_VERSION "1.0.0"
-
-		OUTPUT_NAME "${OUTPUT_NAME}"
-	)
-
-	# Workaround of 'bin/***.framework/Resources' existing in godot-cpp repo by default'
-	set(RESOURCES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/project/bin/${OUTPUT_NAME}.framework/Resources")
-	if(IS_DIRECTORY ${RESOURCES_DIR} AND NOT IS_SYMLINK ${RESOURCES_DIR})
-		message(STATUS "Removing '${RESOURCES_DIR}' to create symlink ...")
-		file(REMOVE_RECURSE ${RESOURCES_DIR})
-	endif()
-
-# TODO: IOS configuration
-#elseif("${GODOT_PLATFORM}" STREQUAL "ios")
-else()
-	add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
-	set_target_properties(${PROJECT_NAME} PROPERTIES
-		OUTPUT_NAME "${PROJECT_NAME}${LIBRARY_SUFFIX}"
-)
-endif()
-
-target_link_libraries(${PROJECT_NAME} PUBLIC godot-cpp)
-
-get_target_property(GODOT_C_FLAGS godot-cpp GODOT_C_FLAGS)
-get_target_property(GODOT_CXX_FLAGS godot-cpp GODOT_CXX_FLAGS)
-get_target_property(GODOT_COMPILE_WARNING_FLAGS godot-cpp GODOT_COMPILE_WARNING_FLAGS)
-target_compile_options(${PROJECT_NAME} PRIVATE
-	${GODOT_C_FLAGS}
-	${GODOT_CXX_FLAGS}
-	${GODOT_COMPILE_WARNING_FLAGS}
+add_library(${PROJECT_NAME} SHARED EXCLUDE_FROM_ALL)
+target_sources(
+    ${PROJECT_NAME}
+	 PRIVATE ${SOURCES} ${HEADERS}
 )
 
-get_target_property(GODOT_LINK_FLAGS godot-cpp GODOT_LINK_FLAGS)
-target_link_options(${PROJECT_NAME} PRIVATE ${GODOT_LINK_FLAGS})
-
-
-get_target_property(LIBRARY_SUFFIX godot-cpp LIBRARY_SUFFIX)
-set_target_properties(${PROJECT_NAME}
-	PROPERTIES
-		PREFIX "lib"
-		LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin"
-		LIBRARY_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}/bin"
-		LIBRARY_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/bin"
-		LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_CURRENT_SOURCE_DIR}/bin"
-		LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_CURRENT_SOURCE_DIR}/bin"
-		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin"
-		RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}/bin"
-		RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/bin"
-		RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_CURRENT_SOURCE_DIR}/bin"
-		RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_CURRENT_SOURCE_DIR}/bin"
-)
-
-if(${GODOT_WARNING_AS_ERROR})
-	set_warning_as_error(${PROJECT_NAME})
+# conditionally add doc data to compile output
+if(GODOTCPP_TARGET MATCHES "editor|template_debug")
+    find_package(Python3 3.4 REQUIRED)
+    file(GLOB_RECURSE DOC_XML LIST_DIRECTORIES NO CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/doc_classes/*.xml")
+    target_doc_sources( ${PROJECT_NAME} ${DOC_XML} )
 endif()
 
-###############################
-# godot-cppscript creation
+set(OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin/")
+
+# Link to godot-cpp target
+target_link_libraries(${PROJECT_NAME} PRIVATE godot-cpp)
+
+### Get useful properties from godot-cpp target
+get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
+
+# gersemi: off
+set_target_properties(
+    ${PROJECT_NAME}
+    PROPERTIES
+        CXX_STANDARD 17
+        CXX_EXTENSIONS OFF
+        CXX_VISIBILITY_PRESET ${GODOTCPP_SYMBOL_VISIBILITY}
+
+        POSITION_INDEPENDENT_CODE ON
+        BUILD_RPATH_USE_ORIGIN ON
+
+        # Try to ensure only static libraries are selected to be linked to.
+        LINK_SEARCH_START_STATIC ON
+        LINK_SEARCH_END_STATIC ON
+
+        # NOTE: Wrapping the output variables inside a generator expression
+        # prevents msvc generator from adding addition Config Directories
+        LIBRARY_OUTPUT_DIRECTORY "$<1:${OUTPUT_DIR}>"
+        RUNTIME_OUTPUT_DIRECTORY "$<1:${OUTPUT_DIR}>"
+        PDB_OUTPUT_DIRECTORY     "$<1:${OUTPUT_DIR}>" #MSVC Only, ignored on other platforms
+
+        PREFIX "lib"
+		  OUTPUT_NAME "${PROJECT_NAME}${GODOTCPP_SUFFIX}"
+        # TODO rename the file for both CMake and SCons
+
+        # Some IDE's respect this property to logically group targets
+        FOLDER "godot-cpp"
+)
+# gersemi: on
+
+# CMAKE_SYSTEM_NAME refers to the target system
+if(CMAKE_SYSTEM_NAME STREQUAL Darwin)
+    set_target_properties(
+        ${PROJECT_NAME}
+        PROPERTIES SUFFIX "" OUTPUT_DIR "${OUTPUT_DIR}/libgdexample.macos.${GODOTCPP_TARGET}.framework"
+    )
+endif()
 
 # Include module
 include(${CMAKE_CURRENT_SOURCE_DIR}/external/cppscript/godot_cppscript.cmake)
@@ -149,11 +113,12 @@ create_cppscript_target(
 )
 
 # Add sources to your target
-target_sources(${PROJECT_NAME} PRIVATE ${GEN_SOURCES})
+target_sources(
+    ${PROJECT_NAME}
+	 PRIVATE ${GEN_SOURCES}
+)
 
 # Include headers path (if not done already)
 target_include_directories(${PROJECT_NAME} PRIVATE
 	src
 )
-###############################
-
