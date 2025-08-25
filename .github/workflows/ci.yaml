@@ -47,7 +47,7 @@ jobs:
               cmake --build build_debug --config RelWithDebInfo -v
 
             build_release: |
-              cmake {0} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DGODOT_TARGET=template_release -B build_release .
+              cmake {0} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DGODOTCPP_TARGET=template_release -B build_release .
               cmake --build build_release --config Release -v
 
         platform:
@@ -75,7 +75,7 @@ jobs:
               CMake: bin/libscripts.linux.template_debug.double.x86_64.so
             flags:
               SCons: platform=linux precision=double
-              CMake: -G "Ninja Multi-Config" -DGODOT_PRECISION=double
+              CMake: -G "Ninja Multi-Config" -DGODOTCPP_PRECISION=double
             run-tests: false
             cache-name: linux-x86_64-f64
 
