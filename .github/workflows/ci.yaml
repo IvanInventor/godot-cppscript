@@ -44,11 +44,11 @@ jobs:
           - name: CMake
             build_debug: |
               cmake {0} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -B build_debug .
-              cmake --build build_debug --config RelWithDebInfo -v
+              cmake --build build_debug --config RelWithDebInfo --target scripts -v
 
             build_release: |
               cmake {0} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DGODOTCPP_TARGET=template_release -B build_release .
-              cmake --build build_release --config Release -v
+              cmake --build build_release --config Release --target scripts -v
 
         platform:
           - name: 🐧 Linux
