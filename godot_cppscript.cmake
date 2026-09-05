@@ -1,4 +1,5 @@
 # THIS FILE IS AUTO-GENERATED
+
 # See `https://github.com/IvanInventor/godot-cppscript/tree/next` for proper source
 cmake_minimum_required(VERSION 3.12.4)
 
