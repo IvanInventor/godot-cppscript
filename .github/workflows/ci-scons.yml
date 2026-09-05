@@ -133,7 +133,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: test
           submodules: recursive
+
+      - name: Prepare tested branch
+        run: |
+          git fetch origin ${{ github.sha }}
+          cd external/cppscript
+          git fetch ../../ ${{ github.sha }}
+          git checkout ${{ github.sha }}
+          cd -
 
       - name: Restore Godot build cache
         uses: ./.github/actions/godot-cache-restore
@@ -160,12 +169,10 @@ jobs:
 
       - name: Build test without rebuilding godot-cpp (debug)
         run: |
-          cd test
           scons platform=${{ matrix.platform }} verbose=yes build_library=no target=template_debug ${{ matrix.flags }} api_version=${{ matrix.api-version || env.DEFAULT_API_VERSION }}
 
       - name: Build test and godot-cpp (release)
         run: |
-          cd test
           scons platform=${{ matrix.platform }} verbose=yes target=template_release ${{ matrix.flags }} api_version=${{ matrix.api-version || env.DEFAULT_API_VERSION }}
 
       - name: Save Godot build cache
@@ -212,7 +219,6 @@ jobs:
         if: matrix.run-tests
         run: |
           GODOT_BUILDS="$(pwd)/godot-builds"
-          cd test
           for version in ${{ matrix.godot-test-versions }} master; do
             rm -rf ./project/.godot
             export GODOT="${GODOT_BUILDS}/godot-${version}"
