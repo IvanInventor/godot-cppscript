@@ -1647,7 +1647,6 @@ if __name__ == \"__main__\":
 		endforeach()
 
 		set(GENERATED_FILES
-			"${CPPS_HEADERS_DIR}/${CPPS_HEADER_NAME}"
 			"${CPPS_HEADERS_DIR}/scripts.gen.h"
 			"${CPPS_HEADERS_DIR}/properties.gen.h"
 			${SOURCES_LIST}
