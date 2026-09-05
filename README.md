@@ -4,11 +4,11 @@
 
 Python script that uses various C++ macros and templates to automate binding code generation and provide short and readable godot-specific compile error messages. With simple configuration, can attach to existing SCons/CMake build tool. Works similar to [Unreal Header Tool](https://docs.unrealengine.com/5.3/en-US/unreal-header-tool-for-unreal-engine/).
 
-[Example project](https://github.com/IvanInventor/godot-cppscript-example) 
+[Example project](https://github.com/IvanInventor/godot-cppscript/tree/test) 
 
-[Keywords description](https://github.com/IvanInventor/godot-cppscript-example/blob/master/src/example.hpp) (read comments)
+[Keywords description](https://github.com/IvanInventor/godot-cppscript/blob/test/src/example.hpp) (read comments)
 
-[Property hints description](https://github.com/IvanInventor/godot-cppscript-example/blob/master/src/example_properties.hpp) (read comments)
+[Property hints description](https://github.com/IvanInventor/godot-cppscript/blob/test/src/example_properties.hpp) (read comments)
 ## Dependencies
 #### Programs
 [Godot 4](https://godotengine.org/download/archive/) (>=4.1)
