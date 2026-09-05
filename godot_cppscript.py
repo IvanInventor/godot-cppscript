@@ -893,200 +893,6 @@ def cursor_get_field_type(cursor):
 	.format(cursor.location.file.name, cursor.location.line, cursor.location.column, cursor.spelling))
 
 
-def process_macros(groups, filecontent, class_defs, item, macros, properties, is_ignored=False):
-	for macro in macros:
-		if macro.spelling in INIT_LEVELS:
-			class_defs['init_level'] = macro.spelling[12:]
-
-		match macro.spelling:
-			case 'GMETHOD':
-				if item.kind != CursorKind.CXX_METHOD:
-					raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
-					.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
-
-				is_ignored = False
-
-			case 'GPROPERTY':
-				if item.kind != CursorKind.FIELD_DECL:
-					raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be data member'
-					.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
-
-				args = get_macro_args(filecontent, macro)
-				if len(args) < 2:
-					raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage: must be at least 2 arguments: setter and getter'
-					.format(filename, macro.location.line, macro.location.column, macro.spelling))
-
-				properties |= {
-					'setter' : args[0],
-					'getter' : args[1],
-					'hint' : 'PROPERTY_HINT_' + args[2].upper() if len(args) > 2 else None,
-					'args' : ', '.join(args[3:]) if len(args) > 3 else '""'
-					}
-				is_ignored = False
-
-			case 'GGROUP':
-				groups['group'] = get_macro_body(filecontent, macro)
-				groups['subgroup'] = ''
-
-			case 'GSUBGROUP':
-				groups['subgroup'] = get_macro_body(filecontent, macro)
-
-			case 'GBITFIELD':
-				if item.kind != CursorKind.ENUM_DECL:
-					raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be enum'
-					.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
-
-				if item.type.spelling[-1] == ')':
-						raise CppScriptException('{}:{}:{}: error: enum at {}:{} must be named'
-						.format(filename, macro.location.line, macro.location.column, item.location.line, item.location.column))
-
-				properties['enum_type'] = 'bitfields'
-
-			case 'GSIGNAL':
-				macro_args = get_macro_args(filecontent, macro)
-				name = macro_args[0]
-				args = get_pair_arglist(macro_args[1:], 'Variant')
-				class_defs['signals'].append((name, args))
-
-			case 'GRPC':
-				if item.kind != CursorKind.CXX_METHOD:
-					raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
-					.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
-
-				macro_args = get_macro_args(filecontent, macro)
-				rpc_mode, transfer_mode, call_local, channel = None, None, None, None
-
-				if len(macro_args) != 0 and macro_args[-1].isnumeric():
-					if len(macro_args) < 3:
-						raise CppScriptException('{}:{}:{}: error: channel id must come with explicit rpc_mode and transfer_mode'
-						.format(filename, macro.location.line, macro.location.column))
-
-				for arg in macro_args:
-					match arg:
-						case ('any_peer' | 'authority') as mode:
-							if rpc_mode != None:
-								raise CppScriptException('{}:{}:{}: error: duplicate rpc mode keyword usage'
-								.format(filename, macro.location.line, macro.location.column)) 
-
-							rpc_mode = mode.upper()
-
-
-						case ('reliable' | 'unreliable' | 'unreliable_ordered') as mode:
-							if transfer_mode != None:
-								raise CppScriptException('{}:{}:{}: error: duplicate transfer mode keyword usage'
-								.format(filename, macro.location.line, macro.location.column))
-
-							transfer_mode = mode.upper()
-
-
-						case ('call_local' | 'call_remote') as mode:
-							mode = 'true' if mode == 'call_local' else 'false'
-							if call_local != None:
-								raise CppScriptException('{}:{}:{}: error: duplicate call mode keyword usage'
-								.format(filename, macro.location.line, macro.location.column))
-
-							call_local = mode
-
-						case _:
-							if not arg.isnumeric():
-								raise CppScriptException('{}:{}:{}: error: "{}" is not a keyword or channel id'
-								.format(filename, macro.location.line, macro.location.column, arg))
-
-							if channel != None:
-								raise CppScriptException('{}:{}:{}: error: duplicate channel id usage'
-								.format(filename, macro.location.line, macro.location.column))
-
-							channel = arg
-
-				rpc_config = {
-					'rpc_mode' : 'RPC_MODE_' + rpc_mode if rpc_mode != None else 'RPC_MODE_AUTHORITY',
-					'transfer_mode' : 'TRANSFER_MODE_' + transfer_mode if transfer_mode != None else 'TRANSFER_MODE_UNRELIABLE',
-					'call_local' : call_local if call_local != None else 'false',
-					'channel' : channel if channel != None else '0'
-					}
-
-				properties['rpc_config'] = rpc_config 
-
-			case 'GVARARG':
-				if item.kind != CursorKind.CXX_METHOD:
-					raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
-					.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
-
-				properties['varargs'] = get_pair_arglist(get_macro_args(filecontent, macro), 'Variant')
-
-			case 'GIGNORE':
-				is_ignored = True
-
-			case 'GBIND_METHODS_APPEND':
-				class_defs['bind_methods_append'] += '\n' + get_macro_body(filecontent, macro) + '\n'
-
-			case 'GBIND_METHODS_PREPEND':
-				class_defs['bind_methods_prepend'] += '\n' + get_macro_body(filecontent, macro) + '\n'
-
-			case 'GRESOURCE_LOADER':
-				class_defs['is_resource_loader'] = True
-
-			case 'GRESOURCE_SAVER':
-				class_defs['is_resource_saver'] = True
-
-			case 'GEDITOR_PLUGIN':
-				class_defs['init_level'] = 'EDITOR'
-				class_defs['is_editor_plugin'] = True
-
-			case 'GSINGLETON':
-				class_defs['is_singleton'] = True
-
-			case 'GSTATIC_MEMBER':
-				type, name, *init = get_macro_args(filecontent, macro)
-				class_defs['static_members'].append((type, name, ', '.join(init)))
-
-
-	return not is_ignored
-
-
-def apply_macros(groups, filecontent, class_defs, item, macros):
-	properties = None
-	match item.kind:
-		case CursorKind.CXX_METHOD:
-			is_virtual = is_virtual_method(item)
-			properties = {}
-			if process_macros(groups, filecontent, class_defs, item, macros, properties, (is_virtual and item.spelling.startswith('_')) or not env['auto_methods'] or item.access_specifier != AccessSpecifier.PUBLIC):
-				properties |= {
-					'name' : item.spelling,
-					'bind_name' : item.spelling,
-					'return' : item.result_type.spelling,
-					'args' : [(arg.type.spelling, arg.spelling, find_default_arg(filecontent, arg)) for arg in item.get_arguments()],
-					'is_static' : item.is_static_method(),
-					'is_virtual' : is_virtual
-					}
-				class_defs['methods'].append(properties)
-
-		case CursorKind.ENUM_DECL:
-			properties = {'enum_type' : 'enum_constants'}
-			properties['list'] = [enum.spelling for enum in item.get_children() if enum.kind == CursorKind.ENUM_CONSTANT_DECL]
-
-			if process_macros(groups, filecontent, class_defs, item, macros, properties):
-
-				if item.type.spelling[-1] != ')':	# check for named enum
-					class_defs[properties['enum_type']][item.type.spelling] = properties['list']
-				else:
-					class_defs['constants'] += properties['list']
-
-		case CursorKind.FIELD_DECL:
-			properties = {}
-			if process_macros(groups, filecontent, class_defs, item, macros, properties, True):
-				properties |= {
-					'name': item.spelling,
-					'type' : cursor_get_field_type(item),
-					'group' : groups['group'],
-					'subgroup' : groups['subgroup'],
-					'is_static' : item.is_static_method()
-					}
-
-				class_defs['properties'].append(properties)
-
-
-
 # Builder
 def generate_header_scons(target, source, env):
 	if "CPPSCRIPT_DEBUG" in os.environ.keys():
@@ -1106,8 +912,8 @@ def generate_header(source, env, get_file):
 
 	# Move properties file if exists to avoid infinite cycle for auto-genereted getter/setters:
 	# no method definition -> generate one -> parse  | 
-	#	 ^										  V
-	#	 |   do NOT generate one   <-	 method exists
+	#     ^                                          V
+	#     |   do NOT generate one   <-     method exists
 	try:
 		shutil.move(prop_file_name, prop_file_name + '.tmp')
 	except:
@@ -1236,17 +1042,214 @@ def parse_header(index, filename, filecontent, env):
 		# Exclude cursors added by GCLASS() macro
 		child_cursors = [i for i in child_cursors if gdclass_macro.extent.start.offset != i.extent.start.offset]
 
-		groups = { 'group': '', 'subgroup': '' }
+		group, subgroup = '', ''
 		start, end = cursor.extent.start.offset, cursor.extent.end.offset
 		class_macros = sorted([m for m in keyword_macros if start < m.extent.start.offset < end] + child_cursors, key=lambda x: x.extent.start.offset)
 
+		def process_macros(item, macros, properties, is_ignored=False):
+			nonlocal group
+			nonlocal subgroup
+			for macro in macros:
+				if macro.spelling in INIT_LEVELS:
+					class_defs['init_level'] = macro.spelling[12:]
 
-		leftover = collapse_list(class_macros, lambda x: x.kind != CursorKind.MACRO_INSTANTIATION, lambda *args: apply_macros(groups, filecontent, class_defs, *args))
+				match macro.spelling:
+					case 'GMETHOD':
+						if item.kind != CursorKind.CXX_METHOD:
+							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
+							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
+
+						is_ignored = False
+
+					case 'GPROPERTY':
+						if item.kind != CursorKind.FIELD_DECL:
+							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be data member'
+							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
+
+						args = get_macro_args(filecontent, macro)
+						if len(args) < 2:
+							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage: must be at least 2 arguments: setter and getter'
+							.format(filename, macro.location.line, macro.location.column, macro.spelling))
+
+						properties |= {
+							'setter' : args[0],
+							'getter' : args[1],
+							'hint' : 'PROPERTY_HINT_' + args[2].upper() if len(args) > 2 else None,
+							'args' : ', '.join(args[3:]) if len(args) > 3 else '""'
+							}
+						is_ignored = False
+
+					case 'GGROUP':
+						group = get_macro_body(filecontent, macro)
+						subgroup = ''
+
+					case 'GSUBGROUP':
+						subgroup = get_macro_body(filecontent, macro)
+
+					case 'GBITFIELD':
+						if item.kind != CursorKind.ENUM_DECL:
+							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be enum'
+							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
+
+						if item.type.spelling[-1] == ')':
+								raise CppScriptException('{}:{}:{}: error: enum at {}:{} must be named'
+								.format(filename, macro.location.line, macro.location.column, item.location.line, item.location.column))
+
+						properties['enum_type'] = 'bitfields'
+
+					case 'GSIGNAL':
+						macro_args = get_macro_args(filecontent, macro)
+						name = macro_args[0]
+						args = get_pair_arglist(macro_args[1:], 'Variant')
+						class_defs['signals'].append((name, args))
+
+					case 'GRPC':
+						if item.kind != CursorKind.CXX_METHOD:
+							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
+							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
+
+						macro_args = get_macro_args(filecontent, macro)
+						rpc_mode, transfer_mode, call_local, channel = None, None, None, None
+
+						if len(macro_args) != 0 and macro_args[-1].isnumeric():
+							if len(macro_args) < 3:
+								raise CppScriptException('{}:{}:{}: error: channel id must come with explicit rpc_mode and transfer_mode'
+								.format(filename, macro.location.line, macro.location.column))
+
+						for arg in macro_args:
+							match arg:
+								case ('any_peer' | 'authority') as mode:
+									if rpc_mode != None:
+										raise CppScriptException('{}:{}:{}: error: duplicate rpc mode keyword usage'
+										.format(filename, macro.location.line, macro.location.column)) 
+
+									rpc_mode = mode.upper()
+
+
+								case ('reliable' | 'unreliable' | 'unreliable_ordered') as mode:
+									if transfer_mode != None:
+										raise CppScriptException('{}:{}:{}: error: duplicate transfer mode keyword usage'
+										.format(filename, macro.location.line, macro.location.column))
+
+									transfer_mode = mode.upper()
+
+
+								case ('call_local' | 'call_remote') as mode:
+									mode = 'true' if mode == 'call_local' else 'false'
+									if call_local != None:
+										raise CppScriptException('{}:{}:{}: error: duplicate call mode keyword usage'
+										.format(filename, macro.location.line, macro.location.column))
+
+									call_local = mode
+
+								case _:
+									if not arg.isnumeric():
+										raise CppScriptException('{}:{}:{}: error: "{}" is not a keyword or channel id'
+										.format(filename, macro.location.line, macro.location.column, arg))
+
+									if channel != None:
+										raise CppScriptException('{}:{}:{}: error: duplicate channel id usage'
+										.format(filename, macro.location.line, macro.location.column))
+
+									channel = arg
+
+						rpc_config = {
+							'rpc_mode' : 'RPC_MODE_' + rpc_mode if rpc_mode != None else 'RPC_MODE_AUTHORITY',
+							'transfer_mode' : 'TRANSFER_MODE_' + transfer_mode if transfer_mode != None else 'TRANSFER_MODE_UNRELIABLE',
+							'call_local' : call_local if call_local != None else 'false',
+							'channel' : channel if channel != None else '0'
+							}
+
+						properties['rpc_config'] = rpc_config 
+
+					case 'GVARARG':
+						if item.kind != CursorKind.CXX_METHOD:
+							raise CppScriptException('{}:{}:{}: error: incorrect {} macro usage on definition at {}:{}: must be member function'
+							.format(filename, macro.location.line, macro.location.column, macro.spelling, item.location.line, item.location.column))
+
+						properties['varargs'] = get_pair_arglist(get_macro_args(filecontent, macro), 'Variant')
+
+					case 'GIGNORE':
+						is_ignored = True
+
+					case 'GBIND_METHODS_APPEND':
+						class_defs['bind_methods_append'] += '\n' + get_macro_body(filecontent, macro) + '\n'
+
+					case 'GBIND_METHODS_PREPEND':
+						class_defs['bind_methods_prepend'] += '\n' + get_macro_body(filecontent, macro) + '\n'
+
+					case 'GRESOURCE_LOADER':
+						class_defs['is_resource_loader'] = True
+
+					case 'GRESOURCE_SAVER':
+						class_defs['is_resource_saver'] = True
+
+					case 'GEDITOR_PLUGIN':
+						class_defs['init_level'] = 'EDITOR'
+						class_defs['is_editor_plugin'] = True
+
+					case 'GSINGLETON':
+						class_defs['is_singleton'] = True
+
+					case 'GSTATIC_MEMBER':
+						type, name, *init = get_macro_args(filecontent, macro)
+						class_defs['static_members'].append((type, name, ', '.join(init)))
+
+
+			return not is_ignored
+
+
+		def apply_macros(item, macros):
+			nonlocal group
+			nonlocal subgroup
+			properties = None
+			match item.kind:
+				case CursorKind.CXX_METHOD:
+					is_virtual = is_virtual_method(item)
+					properties = {}
+					if process_macros(item, macros, properties, (is_virtual and item.spelling.startswith('_')) or not env['auto_methods'] or item.access_specifier != AccessSpecifier.PUBLIC):
+						properties |= {
+							'name' : item.spelling,
+							'bind_name' : item.spelling,
+							'return' : item.result_type.spelling,
+							'args' : [(arg.type.spelling, arg.spelling, find_default_arg(filecontent, arg)) for arg in item.get_arguments()],
+							'is_static' : item.is_static_method(),
+							'is_virtual' : is_virtual
+							}
+						class_defs['methods'].append(properties)
+
+				case CursorKind.ENUM_DECL:
+					properties = {'enum_type' : 'enum_constants'}
+					properties['list'] = [enum.spelling for enum in item.get_children() if enum.kind == CursorKind.ENUM_CONSTANT_DECL]
+
+					if process_macros(item, macros, properties):
+
+						if item.type.spelling[-1] != ')':	# check for named enum
+							class_defs[properties['enum_type']][item.type.spelling] = properties['list']
+						else:
+							class_defs['constants'] += properties['list']
+
+				case CursorKind.FIELD_DECL:
+					properties = {}
+					if process_macros(item, macros, properties, True):
+						properties |= {
+							'name': item.spelling,
+							'type' : cursor_get_field_type(item),
+							'group' : group,
+							'subgroup' : subgroup,
+							'is_static' : item.is_static_method()
+							}
+
+						class_defs['properties'].append(properties)
+
+
+
+		leftover = collapse_list(class_macros, lambda x: x.kind != CursorKind.MACRO_INSTANTIATION, apply_macros)
 		for macro in leftover:
 			if macro.spelling not in TARGETLESS_KEYWORDS:
 				raise CppScriptException('{}:{}:{}: error: macro "{}" without target member'
 				.format(filename, macro.location.line, macro.location.column, macro.spelling))
-		process_macros(groups, filecontent, class_defs, None, leftover, None)
+		process_macros(None, leftover, None)
 
 
 		parsed_classes[cursor.type.spelling] = class_defs
