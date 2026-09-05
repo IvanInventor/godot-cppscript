@@ -75,8 +75,7 @@ add_custom_command(TARGET ${LIBNAME} POST_BUILD
 )
 
 # Include module
-#include(${CMAKE_CURRENT_SOURCE_DIR}/external/cppscript/godot_cppscript.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/master/godot_cppscript.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/external/cppscript/godot_cppscript.cmake)
 
 # Get header files (.hpp only)
 file(GLOB_RECURSE CPPSCRIPT_HEADERS src/*.hpp)
