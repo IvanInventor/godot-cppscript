@@ -1,5 +1,4 @@
 # THIS FILE IS AUTO-GENERATED
-
 # See `https://github.com/IvanInventor/godot-cppscript/tree/next` for proper source
 cmake_minimum_required(VERSION 3.12.4)
 
@@ -1628,13 +1627,17 @@ if __name__ == \"__main__\":
 		set(GODOT_CPPSCRIPT_BINDINGS_H_PATH "${CPPS_HEADERS_DIR}/cppscript_bindings.h")
 		set(GODOT_CPPSCRIPT_H_PATH "${CPPS_HEADERS_DIR}/${CPPS_HEADER_NAME}")
 
+		message(STATUS "[cppscript] generating file '${GODOT_CPPSCRIPT_PY_SCRIPT_PATH}'...")
 		file(WRITE "${GODOT_CPPSCRIPT_PY_SCRIPT_PATH}" "${CPPSCRIPT_EMBED_PY_SCRIPT}")
+		message(STATUS "[cppscript] generating file '${GODOT_CPPSCRIPT_DEFS_H_PATH}'...")
 		file(WRITE "${GODOT_CPPSCRIPT_DEFS_H_PATH}" "${CPPSCRIPT_DEFS_H}")
+		message(STATUS "[cppscript] generating file '${GODOT_CPPSCRIPT_BINDINGS_H_PATH}'...")
 		file(WRITE "${GODOT_CPPSCRIPT_BINDINGS_H_PATH}" "${CPPSCRIPT_BINDINGS_H}")
 
 		string(TOUPPER "${CPPS_HEADER_NAME}" H_GUARD_STR)
 		string(REPLACE "." "_" H_GUARD_STR "${H_GUARD_STR}")
 		string(REPLACE "@H_GUARD@" "${H_GUARD_STR}" CPPSCRIPT_BODY_H_FORMATTED "${CPPSCRIPT_BODY_H}") 
+		message(STATUS "[cppscript] generating file '${GODOT_CPPSCRIPT_H_PATH}'...")
 		file(WRITE "${GODOT_CPPSCRIPT_H_PATH}" "${CPPSCRIPT_BODY_H_FORMATTED}")
 
 		foreach(PATH ${CPPS_HEADERS_LIST})
@@ -1643,13 +1646,15 @@ if __name__ == \"__main__\":
 			list(APPEND SOURCES_LIST "${CPPS_GEN_DIR}/${relative_path}")
 		endforeach()
 
-		add_custom_command(
-			OUTPUT
-				${CPPS_HEADERS_DIR}/${CPPS_HEADER_NAME}
-				${CPPS_HEADERS_DIR}/scripts.gen.h
-				${CPPS_HEADERS_DIR}/properties.gen.h
-				${SOURCES_LIST}
+		set(GENERATED_FILES
+			"${CPPS_HEADERS_DIR}/${CPPS_HEADER_NAME}"
+			"${CPPS_HEADERS_DIR}/scripts.gen.h"
+			"${CPPS_HEADERS_DIR}/properties.gen.h"
+			${SOURCES_LIST}
+		)
 
+		add_custom_command(
+			OUTPUT ${GENERATED_FILES}
 			COMMAND
 				${Python3_EXECUTABLE}
 					"${GODOT_CPPSCRIPT_PY_SCRIPT_PATH}"
@@ -1661,7 +1666,9 @@ if __name__ == \"__main__\":
 					"--include-paths" ${CPPS_HEADERS_DIR} ${CPPS_INCLUDE_PATHS}
 					"--"
 					${CPPS_HEADERS_LIST}
-			DEPENDS ${CPPS_HEADERS_LIST}
+			DEPENDS
+				${CPPS_HEADERS_LIST}
+				${GODOT_CPPSCRIPT_PY_SCRIPT_PATH}
 			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 			VERBATIM
 			COMMAND_EXPAND_LISTS

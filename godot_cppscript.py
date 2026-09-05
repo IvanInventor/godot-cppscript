@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 # THIS FILE IS AUTO-GENERATED
 # See `https://github.com/IvanInventor/godot-cppscript/tree/next` for proper source
 
