@@ -5,8 +5,6 @@
 
 #include <godot_cpp/core/class_db.hpp>
 
-#include "scripts.gen.h"
-
 void initialize_scripts_module(godot::ModuleInitializationLevel p_level);
 void initialize_scripts_module(godot::ModuleInitializationLevel p_level);
 

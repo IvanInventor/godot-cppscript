@@ -1,73 +1,82 @@
-# Configuration based on godot-cpp/test/CMakeLists.txt
-cmake_minimum_required(VERSION 3.13)
-project(scripts LANGUAGES CXX)
+# Using the same minimum as the godot-cpp project
+cmake_minimum_required(VERSION 3.17)
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/godot-cpp)
+# Silence unused variable warning when specified from toolchain
+if(CMAKE_C_COMPILER)
+endif()
+
+set(LIBNAME "scripts") # "The name of the library"
+set(GODOT_PROJECT_DIR "project" CACHE STRING "The directory of a Godot project folder")
+
+# Make sure all the dependencies are satisfied
+find_package(Python3 3.4 REQUIRED)
+
+add_subdirectory(external/godot-cpp SYSTEM)
+
+# When compiling for emscripten, this toolchainhack needs to be included.
+# set(CMAKE_PROJECT_<project-name>_INCLUDE ${godot-cpp_SOURCE_DIR}/cmake/emsdkHack.cmake)
+
+# Create the gen directory at configure time so IDEs can see generated headers immediately after generate_bindings
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/godot-cpp/gen/include")
+
+# Add godot-cpp's module path and include the exported functions.
+# This is made available for documentation generation
+set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${godot-cpp_SOURCE_DIR}/cmake")
+include(GodotCPPModule)
+
+# The godot-cpp target has some of useful properties attached that can be retrieved like so.
+get_target_property(GODOTCPP_SUFFIX godot::cpp GODOTCPP_SUFFIX)
+get_target_property(GODOTCPP_PLATFORM godot::cpp GODOTCPP_PLATFORM)
+
+# Now we can specify our own project which will inherit any global cmake properties or variables that have been defined.
+project(godot-cpp-template
+    VERSION 1.0
+    DESCRIPTION "This repository serves as a quickstart template for GDExtension development with Godot 4.0+."
+    HOMEPAGE_URL "https://github.com/enetheru/godot-cpp-template/tree/main"
+    LANGUAGES CXX
+)
+
+add_library(${LIBNAME} SHARED)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.c**)
-file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS src/*.h**)
-
-add_library(${PROJECT_NAME} SHARED EXCLUDE_FROM_ALL)
-target_sources(
-    ${PROJECT_NAME}
-	 PRIVATE ${SOURCES} ${HEADERS}
+target_sources(${LIBNAME}
+    PRIVATE
+    ${SOURCES}
 )
+
+# Fetch a list of the xml files to use for documentation and add to our target
+file(GLOB_RECURSE DOC_XML LIST_DIRECTORIES NO CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/doc_classes/*.xml")
 
 # conditionally add doc data to compile output
-if(GODOTCPP_TARGET MATCHES "editor|template_debug")
-    find_package(Python3 3.4 REQUIRED)
-    file(GLOB_RECURSE DOC_XML LIST_DIRECTORIES NO CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/doc_classes/*.xml")
-    target_doc_sources( ${PROJECT_NAME} ${DOC_XML} )
+if(DOC_XML)
+    if(GODOTCPP_TARGET MATCHES "editor|template_debug")
+        target_doc_sources(${LIBNAME} "${DOC_XML}")
+    endif()
 endif()
 
-set(OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin/")
+target_link_libraries(${LIBNAME} PRIVATE godot-cpp)
 
-# Link to godot-cpp target
-target_link_libraries(${PROJECT_NAME} PRIVATE godot-cpp)
+# Require at least C++17 for this target
+set_property(TARGET ${LIBNAME} PROPERTY CXX_STANDARD 17)
 
-### Get useful properties from godot-cpp target
-get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
-
-# gersemi: off
-set_target_properties(
-    ${PROJECT_NAME}
+set_target_properties(${LIBNAME}
     PROPERTIES
-        CXX_STANDARD 17
-        CXX_EXTENSIONS OFF
-        CXX_VISIBILITY_PRESET ${GODOTCPP_SYMBOL_VISIBILITY}
+    # The generator expression here prevents msvc from adding a Debug or Release subdir.
+    RUNTIME_OUTPUT_DIRECTORY "$<1:${PROJECT_SOURCE_DIR}/../bin/${GODOTCPP_PLATFORM}>"
 
-        POSITION_INDEPENDENT_CODE ON
-        BUILD_RPATH_USE_ORIGIN ON
-
-        # Try to ensure only static libraries are selected to be linked to.
-        LINK_SEARCH_START_STATIC ON
-        LINK_SEARCH_END_STATIC ON
-
-        # NOTE: Wrapping the output variables inside a generator expression
-        # prevents msvc generator from adding addition Config Directories
-        LIBRARY_OUTPUT_DIRECTORY "$<1:${OUTPUT_DIR}>"
-        RUNTIME_OUTPUT_DIRECTORY "$<1:${OUTPUT_DIR}>"
-        PDB_OUTPUT_DIRECTORY     "$<1:${OUTPUT_DIR}>" #MSVC Only, ignored on other platforms
-
-        PREFIX "lib"
-		  OUTPUT_NAME "${PROJECT_NAME}${GODOTCPP_SUFFIX}"
-        # TODO rename the file for both CMake and SCons
-
-        # Some IDE's respect this property to logically group targets
-        FOLDER "godot-cpp"
+    PREFIX ""
+    OUTPUT_NAME "${LIBNAME}${GODOTCPP_SUFFIX}"
 )
-# gersemi: on
 
-# CMAKE_SYSTEM_NAME refers to the target system
-if(CMAKE_SYSTEM_NAME STREQUAL Darwin)
-    set_target_properties(
-        ${PROJECT_NAME}
-        PROPERTIES SUFFIX "" OUTPUT_DIR "${OUTPUT_DIR}/libgdexample.macos.${GODOTCPP_TARGET}.framework"
-    )
-endif()
+set(GODOT_PROJECT_BINARY_DIR "${PROJECT_SOURCE_DIR}/${GODOT_PROJECT_DIR}/../bin/${GODOTCPP_PLATFORM}")
+
+add_custom_command(TARGET ${LIBNAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${LIBNAME}>" "${GODOT_PROJECT_BINARY_DIR}/$<TARGET_FILE_NAME:${LIBNAME}>"
+)
 
 # Include module
-include(${CMAKE_CURRENT_SOURCE_DIR}/external/cppscript/godot_cppscript.cmake)
+#include(${CMAKE_CURRENT_SOURCE_DIR}/external/cppscript/godot_cppscript.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/master/godot_cppscript.cmake)
 
 # Get header files (.hpp only)
 file(GLOB_RECURSE CPPSCRIPT_HEADERS src/*.hpp)
@@ -102,23 +111,23 @@ create_cppscript_target(
 	# based on definitions
 	#
 	 COMPILE_DEFS
-	 	$<TARGET_PROPERTY:${PROJECT_NAME},COMPILE_DEFINITIONS>
+	 	$<TARGET_PROPERTY:${LIBNAME},COMPILE_DEFINITIONS>
 
 	# Include paths
 	# (Try to avoid godot-cpp headers paths,
 	# it slows parsing drastically)
 	#
 	# INCLUDE_PATHS
-	# 	$<TARGET_PROPERTY:${PROJECT_NAME},INCLUDE_DIRECTORIES>
+	# 	$<TARGET_PROPERTY:${LIBNAME},INCLUDE_DIRECTORIES>
 )
 
 # Add sources to your target
 target_sources(
-    ${PROJECT_NAME}
+    ${LIBNAME}
 	 PRIVATE ${GEN_SOURCES}
 )
 
 # Include headers path (if not done already)
-target_include_directories(${PROJECT_NAME} PRIVATE
+target_include_directories(${LIBNAME} PRIVATE
 	src
 )

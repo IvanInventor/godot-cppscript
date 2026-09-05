@@ -7,26 +7,25 @@
 
 // Include custom headers here
 
+#include "scripts.gen.h"
+
 #include "register_types.h"
 
 using namespace godot;
 
 void initialize_scripts_module(ModuleInitializationLevel p_level) {
+	_cppscript_initialize_module(p_level);
+
+	// Non-cppscript classes, static/global variables
+	// initialization here
 	switch (p_level) {
 		case MODULE_INITIALIZATION_LEVEL_CORE:
-			_register_level_core();
 			break;
 		case MODULE_INITIALIZATION_LEVEL_SERVERS:
-			_register_level_servers();
 			break;
 		case MODULE_INITIALIZATION_LEVEL_SCENE:
-			// Non-cppscript classes, static/global variables
-			// initialization here
-
-			_register_level_scene();
 			break;
 		case MODULE_INITIALIZATION_LEVEL_EDITOR:
-			_register_level_editor();
 			break;
 		default:
 			break;
@@ -34,21 +33,18 @@ void initialize_scripts_module(ModuleInitializationLevel p_level) {
 }
 
 void uninitialize_scripts_module(ModuleInitializationLevel p_level) {
+	_cppscript_uninitialize_module(p_level);
+
+	// Non-cppscript classes, static/global variables
+	// deinitialization here
 	switch (p_level) {
 		case MODULE_INITIALIZATION_LEVEL_CORE:
-			_unregister_level_core();
 			break;
 		case MODULE_INITIALIZATION_LEVEL_SERVERS:
-			_unregister_level_servers();
 			break;
 		case MODULE_INITIALIZATION_LEVEL_SCENE:
-			// Non-cppscript classes, static/global variables
-			// deinitialization here
-
-			_unregister_level_scene();
 			break;
 		case MODULE_INITIALIZATION_LEVEL_EDITOR:
-			_unregister_level_editor();
 			break;
 		default:
 			break;
