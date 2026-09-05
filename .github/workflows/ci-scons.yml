@@ -29,7 +29,7 @@ jobs:
             os: ubuntu-22.04
             platform: linux
             artifact-name: godot-cpp-linux-glibc2.27-x86_64-release
-            artifact-path: bin/libgodot-cpp.linux.template_release.x86_64.a
+            artifact-path: external/godot-cpp/bin/libgodot-cpp.linux.template_release.x86_64.a
             run-tests: true
             cache-name: linux-x86_64
 
@@ -37,7 +37,7 @@ jobs:
             os: ubuntu-22.04
             platform: linux
             artifact-name: godot-cpp-linux-glibc2.27-x86_64-release-godot46
-            artifact-path: bin/libgodot-cpp.linux.template_release.x86_64.a
+            artifact-path: external/godot-cpp/bin/libgodot-cpp.linux.template_release.x86_64.a
             run-tests: true
             api-version: 4.6
             godot-test-versions: "4.6-stable"
@@ -47,7 +47,7 @@ jobs:
             os: ubuntu-22.04
             platform: linux
             artifact-name: godot-cpp-linux-glibc2.27-x86_64-release-godot45
-            artifact-path: bin/libgodot-cpp.linux.template_release.x86_64.a
+            artifact-path: external/godot-cpp/bin/libgodot-cpp.linux.template_release.x86_64.a
             run-tests: true
             api-version: 4.5
             godot-test-versions: "4.5-stable 4.6-stable"
@@ -57,7 +57,7 @@ jobs:
             os: ubuntu-22.04
             platform: linux
             artifact-name: godot-cpp-linux-glibc2.27-x86_64-release-godot44
-            artifact-path: bin/libgodot-cpp.linux.template_release.x86_64.a
+            artifact-path: external/godot-cpp/bin/libgodot-cpp.linux.template_release.x86_64.a
             run-tests: true
             api-version: 4.4
             godot-test-versions: "4.4-stable 4.5-stable 4.6-stable"
@@ -67,7 +67,7 @@ jobs:
             os: ubuntu-22.04
             platform: linux
             artifact-name: godot-cpp-linux-glibc2.27-x86_64-release-godot43
-            artifact-path: bin/libgodot-cpp.linux.template_release.x86_64.a
+            artifact-path: external/godot-cpp/bin/libgodot-cpp.linux.template_release.x86_64.a
             run-tests: true
             api-version: 4.3
             godot-test-versions: "4.3-stable 4.4-stable 4.5-stable 4.6-stable"
@@ -77,7 +77,7 @@ jobs:
             os: windows-2022
             platform: windows
             artifact-name: godot-cpp-windows-msvc2019-x86_64-release
-            artifact-path: bin/libgodot-cpp.windows.template_release.x86_64.lib
+            artifact-path: external/godot-cpp/bin/libgodot-cpp.windows.template_release.x86_64.lib
             run-tests: false
             cache-name: windows-x86_64-msvc
 
@@ -85,7 +85,7 @@ jobs:
             os: windows-2022
             platform: windows
             artifact-name: godot-cpp-linux-mingw-x86_64-release
-            artifact-path: bin/libgodot-cpp.windows.template_release.x86_64.a
+            artifact-path: external/godot-cpp/bin/libgodot-cpp.windows.template_release.x86_64.a
             flags: use_mingw=yes
             run-tests: false
             cache-name: windows-x86_64-mingw
@@ -94,7 +94,7 @@ jobs:
             os: macos-latest
             platform: macos
             artifact-name: godot-cpp-macos-universal-release
-            artifact-path: bin/libgodot-cpp.macos.template_release.universal.a
+            artifact-path: external/godot-cpp/bin/libgodot-cpp.macos.template_release.universal.a
             flags: arch=universal
             run-tests: false
             cache-name: macos-universal
@@ -103,7 +103,7 @@ jobs:
             os: ubuntu-22.04
             platform: android
             artifact-name: godot-cpp-android-arm64-release
-            artifact-path: bin/libgodot-cpp.android.template_release.arm64.a
+            artifact-path: external/godot-cpp/bin/libgodot-cpp.android.template_release.arm64.a
             flags: arch=arm64
             run-tests: false
             cache-name: android-arm64
@@ -112,7 +112,7 @@ jobs:
             os: macos-latest
             platform: ios
             artifact-name: godot-cpp-ios-arm64-release
-            artifact-path: bin/libgodot-cpp.ios.template_release.arm64.a
+            artifact-path: external/godot-cpp/bin/libgodot-cpp.ios.template_release.arm64.a
             flags: arch=arm64
             run-tests: false
             cache-name: ios-arm64
@@ -121,7 +121,7 @@ jobs:
             os: ubuntu-22.04
             platform: web
             artifact-name: godot-cpp-web-wasm32-release
-            artifact-path: bin/libgodot-cpp.web.template_release.wasm32.a
+            artifact-path: external/godot-cpp/bin/libgodot-cpp.web.template_release.wasm32.a
             run-tests: false
             cache-name: web-wasm32
 
@@ -156,11 +156,6 @@ jobs:
           platform: ${{ matrix.platform }}
           windows-compiler: ${{ contains(matrix.flags, 'use_mingw=yes') && 'mingw' || 'msvc' }}
           buildtool: scons
-
-      - name: Generate godot-cpp sources only
-        run: |
-          scons platform=${{ matrix.platform }} verbose=yes build_library=no ${{ matrix.flags }} api_version=${{ matrix.api-version || env.DEFAULT_API_VERSION }}
-          scons -c platform=${{ matrix.platform }} ${{ matrix.flags }} api_version=${{ matrix.api-version || env.DEFAULT_API_VERSION }}
 
       - name: Build godot-cpp (debug)
         run: |
