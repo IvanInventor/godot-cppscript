@@ -125,7 +125,7 @@ public:
 	Ref<ExampleRef> return_ref() const;
 
 	Ref<ExampleRef> return_empty_ref() const;
-	ExampleRef *return_extended_ref() const;
+	Ref<ExampleRef> return_extended_ref() const;
 	Ref<ExampleRef> extended_ref_checks(Ref<ExampleRef> p_ref) const;
 
 	// Vararg method declaration

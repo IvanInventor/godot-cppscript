@@ -166,7 +166,7 @@ Ref<ExampleRef> Example::return_empty_ref() const {
 	return ref;
 }
 
-ExampleRef *Example::return_extended_ref() const {
+Ref<ExampleRef> Example::return_extended_ref() const {
 	// You can instance and return a refcounted object like this, but keep in mind that refcounting starts with the returned object
 	// and it will be destroyed when all references are destroyed. If you store this pointer you run the risk of having a pointer
 	// to a destroyed object.
