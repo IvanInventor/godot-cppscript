@@ -26,8 +26,6 @@ jobs:
       config-flags:
         -DCMAKE_C_COMPILER_LAUNCHER=sccache
         -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
-        -DGODOTCPP_ENABLE_TESTING=ON
-        -DGODOTCPP_BUILD_PROFILE="build_profile.json"
         -DGODOTCPP_ENABLE_TESTING=OFF
       SCCACHE_GHA_ENABLED: "true"
 
@@ -40,7 +38,7 @@ jobs:
             platform: linux
             config-flags: -DCMAKE_BUILD_TYPE=Release
             artifact-name: godot-cpp-linux-glibc2.27-x86_64-release.cmake
-            artifact-path: cmake-build/bin/libgodot-cpp.linux.template_release.x86_64.a
+            artifact-path: cmake-build-release/bin/libgodot-cpp.linux.template_release.x86_64.a
             run-tests: true
 
           - name: 🏁 Windows (x86_64, MSVC)
@@ -49,7 +47,7 @@ jobs:
             compiler: msvc
             build-flags: --config Release
             artifact-name: godot-cpp-windows-msvc2019-x86_64-release.cmake
-            artifact-path: cmake-build/bin/libgodot-cpp.windows.template_release.x86_64.lib
+            artifact-path: cmake-build-release/bin/libgodot-cpp.windows.template_release.x86_64.lib
             run-tests: false
 
           - name: 🏁 Windows (x86_64, MinGW, Ninja)
@@ -60,7 +58,7 @@ jobs:
               -GNinja -DCMAKE_BUILD_TYPE=Release
               -DCMAKE_CXX_COMPILER=cc -DCMAKE_CXX_COMPILER=c++
             artifact-name: godot-cpp-linux-mingw-x86_64-release.cmake
-            artifact-path: cmake-build/bin/libgodot-cpp.windows.template_release.x86_64.a
+            artifact-path: cmake-build-release/bin/libgodot-cpp.windows.template_release.x86_64.a
             run-tests: false
 
           - name: 🍎 macOS (universal, Makefiles)
@@ -68,7 +66,7 @@ jobs:
             platform: macos
             config-flags: -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
             artifact-name: godot-cpp-macos-universal-release.cmake
-            artifact-path: cmake-build/bin/libgodot-cpp.macos.template_release.universal.a
+            artifact-path: cmake-build-release/bin/libgodot-cpp.macos.template_release.universal.a
             run-tests: false
 
           - name: 🤖 Android (arm64, Ninja)
@@ -79,7 +77,7 @@ jobs:
               --toolchain ${ANDROID_HOME}/ndk/28.1.13356709/build/cmake/android.toolchain.cmake
               -DANDROID_PLATFORM=24 -DANDROID_ABI=arm64-v8a
             artifact-name: godot-cpp-android-arm64-release.cmake
-            artifact-path: cmake-build/bin/libgodot-cpp.android.template_release.arm64.a
+            artifact-path: cmake-build-release/bin/libgodot-cpp.android.template_release.arm64.a
             flags: arch=arm64
             run-tests: false
 
@@ -92,7 +90,7 @@ jobs:
               -DPLATFORM=OS64
             build-flags: --config Release
             artifact-name: godot-cpp-ios-arm64-release.cmake
-            artifact-path: cmake-build/bin/libgodot-cpp.ios.template_release.arm64.a
+            artifact-path: cmake-build-release/bin/libgodot-cpp.ios.template_release.arm64.a
             flags: arch=arm64
             run-tests: false
 
@@ -103,7 +101,7 @@ jobs:
               -G Ninja  -DCMAKE_BUILD_TYPE=Release
               --toolchain ${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake
             artifact-name: godot-cpp-web-wasm32-release.cmake
-            artifact-path: cmake-build/bin/libgodot-cpp.web.template_release.wasm32.a
+            artifact-path: cmake-build-release/bin/libgodot-cpp.web.template_release.wasm32.a
             run-tests: false
 
     steps:
@@ -131,21 +129,17 @@ jobs:
           windows-compiler: ${{ matrix.compiler }}
           buildtool: cmake
 
-      - name: Configure godot-cpp-test with template_debug
-        run: >
-          cmake --log-level=VERBOSE -S . -B cmake-build '-DGODOTCPP_API_VERSION=${{ env.DEFAULT_API_VERSION }}' ${{ env.config-flags }} ${{ matrix.config-flags }}
+      # Separating configuring and building breaks workflow even when all needed files are generated
 
       - name: Build godot-cpp-test (template_debug)
-        run: >
+        run: |
+          cmake --log-level=VERBOSE -S . -B cmake-build '-DGODOTCPP_API_VERSION=${{ env.DEFAULT_API_VERSION }}' ${{ env.config-flags }} ${{ matrix.config-flags }}
           cmake --build cmake-build --verbose ${{ matrix.build-flags }}
-
-      - name: Configure godot-cpp-test with template_release
-        run: >
-          cmake --fresh --log-level=VERBOSE -S . -B cmake-build -DGODOTCPP_TARGET=template_release '-DGODOTCPP_API_VERSION=${{ env.DEFAULT_API_VERSION }}' ${{ env.config-flags }} ${{ matrix.config-flags }}
 
       - name: Build godot-cpp-test (template_release)
-        run: >
-          cmake --build cmake-build --verbose ${{ matrix.build-flags }}
+        run: |
+          cmake --fresh --log-level=VERBOSE -S . -B cmake-build-release -DGODOTCPP_TARGET=template_release '-DGODOTCPP_API_VERSION=${{ env.DEFAULT_API_VERSION }}' ${{ env.config-flags }} ${{ matrix.config-flags }}
+          cmake --build cmake-build-release --verbose ${{ matrix.build-flags }}
 
       - name: Run sccache stat for check
         shell: bash
@@ -184,9 +178,8 @@ jobs:
         if: matrix.run-tests
         run: |
           $GODOT --headless --version
-          cd test
           # Need to run the editor so .godot is generated... but it crashes! Ignore that :-)
-          (cd project && (timeout 30 $GODOT --import --headless >/dev/null 2>&1 || true))
+          timeout 30 $GODOT --import --headless --path project >/dev/null 2>&1 || true
           ./run-tests.sh
 
       - name: Upload artifact
