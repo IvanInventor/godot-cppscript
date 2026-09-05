@@ -13,7 +13,7 @@ fi
 
 ./generate.py "$MASTER_DIR" || exit 1
 
-git diff --quiet  || git commit -a
+git diff --quiet  || git commit -a "$@"
 
 REF_SHORT=$(git rev-parse @ | head -c8)
 
