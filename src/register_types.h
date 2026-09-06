@@ -5,8 +5,8 @@
 
 #include <godot_cpp/core/class_db.hpp>
 
-void initialize_scripts_module(godot::ModuleInitializationLevel p_level);
-void initialize_scripts_module(godot::ModuleInitializationLevel p_level);
+void initialize_cppscript_example_name_module(godot::ModuleInitializationLevel p_level);
+void initialize_cppscript_example_name_module(godot::ModuleInitializationLevel p_level);
 
 #endif // REGISTER_TYPES_H
 

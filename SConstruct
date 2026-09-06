@@ -7,7 +7,7 @@ from methods import print_error
 
 from external.cppscript.godot_cppscript import create_cppscript_target
 
-libname = "scripts"
+libname = "cppscript_example_name"
 projectdir = "project"
 
 # Customize this values depending on your project
