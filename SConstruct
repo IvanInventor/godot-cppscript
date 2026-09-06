@@ -102,7 +102,7 @@ generated = create_cppscript_target(
 ###############################
 
 library = env.SharedLibrary(
-    "bin/{}/{}".format(env['platform'], lib_filename),
+    ".bin/{}/{}".format(env['platform'], lib_filename),
     #source=sources,
 	source=sources + generated, # Add generated source files to target
 )
@@ -113,7 +113,7 @@ env.Depends(library[0].sources, generated)
 
 ###############################
 
-copy = env.Install("{}/bin/{}/".format(projectdir, env["platform"]), library)
+copy = env.Install("bin/{}/".format(env["platform"]), library)
 
 default_args = [library, copy]
 Default(*default_args)
