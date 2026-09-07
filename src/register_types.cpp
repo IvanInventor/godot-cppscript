@@ -7,9 +7,10 @@
 
 // Include custom headers here
 
-#include "scripts.gen.h"
-
 #include "register_types.h"
+
+#define CPPSCRIPT_REGISTER
+#include <cppscript.h>
 
 using namespace godot;
 
