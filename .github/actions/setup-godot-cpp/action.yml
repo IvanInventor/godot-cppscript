@@ -38,6 +38,11 @@ runs:
       with:
         python-version: 3.x
 
+    - name: Install cppscript dependencies
+      shell: bash
+      run: |
+        pip install libclang
+
     - name: Setup Android dependencies
       if: inputs.platform == 'android'
       uses: nttld/setup-ndk@v1
