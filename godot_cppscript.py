@@ -2,220 +2,35 @@
 # THIS FILE IS AUTO-GENERATED
 # See `https://github.com/IvanInventor/godot-cppscript/tree/next` for proper source
 
-import sys, os
-
-if __name__ == '__main__':
-    # Ran as configure script
-
-    REGISTER_TYPES_CPP_IN = """
-#include <gdextension_interface.h>
-
-#include <godot_cpp/core/class_db.hpp>
-#include <godot_cpp/core/defs.hpp>
-#include <godot_cpp/godot.hpp>
-
-// Include custom headers here
-
-#include "register_types.h"
-
-using namespace godot;
-
-void initialize_@LIBRARY_NAME@_module(ModuleInitializationLevel p_level) {
-	switch (p_level) {
-		case MODULE_INITIALIZATION_LEVEL_CORE:
-			_register_level_core();
-			break;
-		case MODULE_INITIALIZATION_LEVEL_SERVERS:
-			_register_level_servers();
-			break;
-		case MODULE_INITIALIZATION_LEVEL_SCENE:
-			// Non-cppscript classes, static/global variables
-			// initialization here
-
-			_register_level_scene();
-			break;
-		case MODULE_INITIALIZATION_LEVEL_EDITOR:
-			_register_level_editor();
-			break;
-		default:
-			break;
-	}
-}
-
-void uninitialize_@LIBRARY_NAME@_module(ModuleInitializationLevel p_level) {
-	switch (p_level) {
-		case MODULE_INITIALIZATION_LEVEL_CORE:
-			_unregister_level_core();
-			break;
-		case MODULE_INITIALIZATION_LEVEL_SERVERS:
-			_unregister_level_servers();
-			break;
-		case MODULE_INITIALIZATION_LEVEL_SCENE:
-			// Non-cppscript classes, static/global variables
-			// deinitialization here
-
-			_unregister_level_scene();
-			break;
-		case MODULE_INITIALIZATION_LEVEL_EDITOR:
-			_unregister_level_editor();
-			break;
-		default:
-			break;
-	}
-}
-
-extern "C" {
-// GDExtension initialization
-GDExtensionBool GDE_EXPORT @LIBRARY_NAME@_library_init(GDExtensionInterfaceGetProcAddress p_get_proc_address, GDExtensionClassLibraryPtr p_library, GDExtensionInitialization *r_initialization) {
-	godot::GDExtensionBinding::InitObject init_obj(p_get_proc_address, p_library, r_initialization);
-
-	init_obj.register_initializer(initialize_@LIBRARY_NAME@_module);
-	init_obj.register_terminator(uninitialize_@LIBRARY_NAME@_module);
-	init_obj.set_minimum_library_initialization_level(DEFAULT_INIT_LEVEL);
-
-	return init_obj.init();
-}
-}
-
-
-"""
-    REGISTER_TYPES_H_IN = """
-// Template file to use with godot-cppscript
-#ifndef REGISTER_TYPES_H
-#define REGISTER_TYPES_H
-
-#include <godot_cpp/core/class_db.hpp>
-
-#include "scripts.gen.h"
-
-void initialize_@LIBRARY_NAME@_module(godot::ModuleInitializationLevel p_level);
-void initialize_@LIBRARY_NAME@_module(godot::ModuleInitializationLevel p_level);
-
-#endif // REGISTER_TYPES_H
-
-"""
-    SCRIPTS_GDEXTENSION_IN = """
-[configuration]
-
-entry_symbol = "@LIBRARY_NAME@_library_init"
-compatibility_minimum = 4.1
-
-[libraries]
-
-macos.debug = "res://../bin/lib@LIBRARY_NAME@.macos.template_debug.framework"
-macos.release = "res://../bin/lib@LIBRARY_NAME@.macos.template_release.framework"
-windows.debug.x86_32 = "res://../bin/lib@LIBRARY_NAME@.windows.template_debug.x86_32.dll"
-windows.release.x86_32 = "res://../bin/lib@LIBRARY_NAME@.windows.template_release.x86_32.dll"
-windows.debug.x86_64 = "res://../bin/lib@LIBRARY_NAME@.windows.template_debug.x86_64.dll"
-windows.release.x86_64 = "res://../bin/lib@LIBRARY_NAME@.windows.template_release.x86_64.dll"
-linux.debug.x86_64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_debug.x86_64.so"
-linux.release.x86_64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_release.x86_64.so"
-linux.debug.arm64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_debug.arm64.so"
-linux.release.arm64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_release.arm64.so"
-linux.debug.rv64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_debug.rv64.so"
-linux.release.rv64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_release.rv64.so"
-android.debug.x86_64 = "res://../bin/lib@LIBRARY_NAME@.android.template_debug.x86_64.so"
-android.release.x86_64 = "res://../bin/lib@LIBRARY_NAME@.android.template_release.x86_64.so"
-android.debug.arm64 = "res://../bin/lib@LIBRARY_NAME@.android.template_debug.arm64.so"
-android.release.arm64 = "res://../bin/lib@LIBRARY_NAME@.android.template_release.arm64.so"
-web.debug.wasm32 = "res://../bin/lib@LIBRARY_NAME@.web.template_debug.wasm32.wasm"
-
-"""
-
-
-    import os, sys
-    argv = sys.argv[1:]
-
-    try:
-        library_name = argv[0].replace('-', '_')
-        cpp_path = argv[1]
-        h_path = argv[2]
-        gdext_path = argv[3]
-    except:
-        print(
-            '',
-            'ERROR: Not enough arguments.',
-            'Needed arguments (<argument> - example):',
-            '',
-            '<library_name>              (`my_library_name`)',
-            '<cpp_file_path>             (`src/register_types.cpp`)',
-            '<header_file_path>          (`include/register_types.h`)',
-            '<gdextension_file_path>     (`project/my_library.gdextension`)',
-            '',
-	        sep='\n', file=sys.stderr)
-        exit(1)
-
-    print(
-        'These files will be affected:',
-        f'{"(New)     " if not os.path.exists(gdext_path) else "(Override)"} {gdext_path}',
-        f'{"(New)     " if not os.path.exists(cpp_path) else "(Override)"} {cpp_path}',
-        f'{"(New)     " if not os.path.exists(h_path) else "(Override)"} {h_path}',
-        sep='\n')
-    while True:
-        inp = input('Are you sure? (Y/N) ')
-        if inp == '':
-            continue
-        if inp not in 'yY':
-            print('No changes, exiting...')
-            exit(1)
-        break
-
-    print(f"Configuring '{gdext_path}' ...")
-    open(gdext_path, 'w').write(
-        SCRIPTS_GDEXTENSION_IN.replace('@LIBRARY_NAME@', library_name))
-
-    print(f"Configuring '{cpp_path}' ...")
-    open(cpp_path, 'w').write(
-        REGISTER_TYPES_CPP_IN.replace('@LIBRARY_NAME@', library_name))
-
-    print(f"Configuring '{h_path}' ...")
-    open(h_path, 'w').write(
-        REGISTER_TYPES_H_IN.replace('@LIBRARY_NAME@', library_name))
-
-    print("Files configured.")
-    exit(0)
-
-
-CPPSCRIPT_BODY_H = """
-#ifndef @H_GUARD@
-#define @H_GUARD@
-#include "cppscript_defs.h"
-#include "properties.gen.h"
-#endif // @H_GUARD@
-
-"""
-CPPSCRIPT_DEFS_H = """
-#ifndef CPPSCRIPT_HEADER
-#define CPPSCRIPT_HEADER
-
-#define GCLASS(CLASS_NAME, CLASS_NAME_INH) 								\\
-	GDCLASS(CLASS_NAME , CLASS_NAME_INH)								\\
-protected:												\\
-static void _bind_methods();										\\
-protected:												\\
-void _rpc_config();											\\
-public:													\\
-GSETGET_ ## CLASS_NAME											\\
+CPPSCRIPT_DEFS_H = r'''
+#define GCLASS(CLASS_NAME, CLASS_NAME_INH) 								\
+	GDCLASS(CLASS_NAME , CLASS_NAME_INH)								\
+protected:												\
+static void _bind_methods();										\
+protected:												\
+void _rpc_config();											\
+public:													\
+GSETGET_ ## CLASS_NAME											\
 private:
 
 #define GVIRTUAL_CLASS(CLASS_NAME, CLASS_NAME_INH) GCLASS(CLASS_NAME, CLASS_NAME_INH)
 #define GABSTRACT_CLASS(CLASS_NAME, CLASS_NAME_INH) GCLASS(CLASS_NAME, CLASS_NAME_INH)
 #define GINTERNAL_CLASS(CLASS_NAME, CLASS_NAME_INH) GCLASS(CLASS_NAME, CLASS_NAME_INH)
 
-#define GENERATE_GETTER_DECLARATION(function, prop_type)	\\
+#define GENERATE_GETTER_DECLARATION(function, prop_type)	\
 prop_type function();
 
-#define GENERATE_SETTER_DECLARATION(function, prop_type)	\\
+#define GENERATE_SETTER_DECLARATION(function, prop_type)	\
 void function(prop_type);
 
-#define GENERATE_GETTER(function, property, prop_type)	\\
-prop_type function() {			\\
-	return property;			\\
+#define GENERATE_GETTER(function, property, prop_type)	\
+prop_type function() {			\
+	return property;			\
 }
 
-#define GENERATE_SETTER(function, property, prop_type)	\\
-void function(prop_type value) {	\\
-	this->property = value;			\\
+#define GENERATE_SETTER(function, property, prop_type)	\
+void function(prop_type value) {	\
+	this->property = value;			\
 }
 
 #define GPROPERTY(...)
@@ -239,9 +54,9 @@ void function(prop_type value) {	\\
 #define GEDITOR_PLUGIN(...)
 #define GSINGLETON(...);
 
-#define GSTATIC_MEMBER(s_type, s_name, ...)												\\
-friend impl::StaticAccess;																		\\
-alignas(s_type) static char s_name ## _impl [sizeof(s_type)];						\\
+#define GSTATIC_MEMBER(s_type, s_name, ...)												\
+friend impl::StaticAccess;																		\
+alignas(s_type) static char s_name ## _impl [sizeof(s_type)];						\
 static inline s_type& s_name = *reinterpret_cast<s_type*>(&s_name ## _impl);
 
 namespace impl {
@@ -254,14 +69,8 @@ struct StaticAccess;
  * but not that `StringName`s with same string literal are the same object.
  */
 #define SNAME(str_literal) ([]() -> const ::godot::StringName& {static const ::godot::StringName str(str_literal); return str;}())
-
-#endif // CPPSCRIPT_HEADER
-
-"""
-CPPSCRIPT_BINDINGS_H = """
-#ifndef CPPSCRIPT_BINDINGS_H
-#define CPPSCRIPT_BINDINGS_H
-
+'''
+CPPSCRIPT_BINDINGS_H = r'''
 #include <type_traits>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/ref.hpp>
@@ -474,10 +283,179 @@ struct StaticMethod {
 		impl::BindCheck<true>::bind_static(name, dmethod, Ptr, args...);	
 	}
 };
+'''
 
-#endif //CPPSCRIPT_BINDINGS_H
 
-"""
+import sys, os
+
+if __name__ == '__main__':
+    # Ran as configure script
+
+    REGISTER_TYPES_CPP_IN = r'''
+#include <gdextension_interface.h>
+
+#include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/core/defs.hpp>
+#include <godot_cpp/godot.hpp>
+
+// Include custom headers here
+
+#include "register_types.h"
+
+using namespace godot;
+
+void initialize_@LIBRARY_NAME@_module(ModuleInitializationLevel p_level) {
+	switch (p_level) {
+		case MODULE_INITIALIZATION_LEVEL_CORE:
+			_register_level_core();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_SERVERS:
+			_register_level_servers();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_SCENE:
+			// Non-cppscript classes, static/global variables
+			// initialization here
+
+			_register_level_scene();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_EDITOR:
+			_register_level_editor();
+			break;
+		default:
+			break;
+	}
+}
+
+void uninitialize_@LIBRARY_NAME@_module(ModuleInitializationLevel p_level) {
+	switch (p_level) {
+		case MODULE_INITIALIZATION_LEVEL_CORE:
+			_unregister_level_core();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_SERVERS:
+			_unregister_level_servers();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_SCENE:
+			// Non-cppscript classes, static/global variables
+			// deinitialization here
+
+			_unregister_level_scene();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_EDITOR:
+			_unregister_level_editor();
+			break;
+		default:
+			break;
+	}
+}
+
+extern "C" {
+// GDExtension initialization
+GDExtensionBool GDE_EXPORT @LIBRARY_NAME@_library_init(GDExtensionInterfaceGetProcAddress p_get_proc_address, GDExtensionClassLibraryPtr p_library, GDExtensionInitialization *r_initialization) {
+	godot::GDExtensionBinding::InitObject init_obj(p_get_proc_address, p_library, r_initialization);
+
+	init_obj.register_initializer(initialize_@LIBRARY_NAME@_module);
+	init_obj.register_terminator(uninitialize_@LIBRARY_NAME@_module);
+	init_obj.set_minimum_library_initialization_level(DEFAULT_INIT_LEVEL);
+
+	return init_obj.init();
+}
+}
+
+'''
+    REGISTER_TYPES_H_IN = r'''
+// Template file to use with godot-cppscript
+#ifndef REGISTER_TYPES_H
+#define REGISTER_TYPES_H
+
+#include <godot_cpp/core/class_db.hpp>
+
+#include "scripts.gen.h"
+
+void initialize_@LIBRARY_NAME@_module(godot::ModuleInitializationLevel p_level);
+void initialize_@LIBRARY_NAME@_module(godot::ModuleInitializationLevel p_level);
+
+#endif // REGISTER_TYPES_H
+'''
+    SCRIPTS_GDEXTENSION_IN = r'''
+[configuration]
+
+entry_symbol = "@LIBRARY_NAME@_library_init"
+compatibility_minimum = 4.1
+
+[libraries]
+
+macos.debug = "res://../bin/lib@LIBRARY_NAME@.macos.template_debug.framework"
+macos.release = "res://../bin/lib@LIBRARY_NAME@.macos.template_release.framework"
+windows.debug.x86_32 = "res://../bin/lib@LIBRARY_NAME@.windows.template_debug.x86_32.dll"
+windows.release.x86_32 = "res://../bin/lib@LIBRARY_NAME@.windows.template_release.x86_32.dll"
+windows.debug.x86_64 = "res://../bin/lib@LIBRARY_NAME@.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://../bin/lib@LIBRARY_NAME@.windows.template_release.x86_64.dll"
+linux.debug.x86_64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_release.x86_64.so"
+linux.debug.arm64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_debug.arm64.so"
+linux.release.arm64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_release.arm64.so"
+linux.debug.rv64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_debug.rv64.so"
+linux.release.rv64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_release.rv64.so"
+android.debug.x86_64 = "res://../bin/lib@LIBRARY_NAME@.android.template_debug.x86_64.so"
+android.release.x86_64 = "res://../bin/lib@LIBRARY_NAME@.android.template_release.x86_64.so"
+android.debug.arm64 = "res://../bin/lib@LIBRARY_NAME@.android.template_debug.arm64.so"
+android.release.arm64 = "res://../bin/lib@LIBRARY_NAME@.android.template_release.arm64.so"
+web.debug.wasm32 = "res://../bin/lib@LIBRARY_NAME@.web.template_debug.wasm32.wasm"
+'''
+
+
+    import os, sys
+    argv = sys.argv[1:]
+
+    try:
+        library_name = argv[0].replace('-', '_')
+        cpp_path = argv[1]
+        h_path = argv[2]
+        gdext_path = argv[3]
+    except:
+        print(
+            '',
+            'ERROR: Not enough arguments.',
+            'Needed arguments (<argument> - example):',
+            '',
+            '<library_name>              (`my_library_name`)',
+            '<cpp_file_path>             (`src/register_types.cpp`)',
+            '<header_file_path>          (`include/register_types.h`)',
+            '<gdextension_file_path>     (`project/my_library.gdextension`)',
+            '',
+	        sep='\n', file=sys.stderr)
+        exit(1)
+
+    print(
+        'These files will be affected:',
+        f'{"(New)     " if not os.path.exists(gdext_path) else "(Override)"} {gdext_path}',
+        f'{"(New)     " if not os.path.exists(cpp_path) else "(Override)"} {cpp_path}',
+        f'{"(New)     " if not os.path.exists(h_path) else "(Override)"} {h_path}',
+        sep='\n')
+    while True:
+        inp = input('Are you sure? (Y/N) ')
+        if inp == '':
+            continue
+        if inp not in 'yY':
+            print('No changes, exiting...')
+            exit(1)
+        break
+
+    print(f"Configuring '{gdext_path}' ...")
+    open(gdext_path, 'w').write(
+        SCRIPTS_GDEXTENSION_IN.replace('@LIBRARY_NAME@', library_name))
+
+    print(f"Configuring '{cpp_path}' ...")
+    open(cpp_path, 'w').write(
+        REGISTER_TYPES_CPP_IN.replace('@LIBRARY_NAME@', library_name))
+
+    print(f"Configuring '{h_path}' ...")
+    open(h_path, 'w').write(
+        REGISTER_TYPES_H_IN.replace('@LIBRARY_NAME@', library_name))
+
+    print("Files configured.")
+    exit(0)
+
 
 
 # Ran as module from SConstruct
@@ -513,19 +491,7 @@ class CppScriptBuilder():
 		bindings = os.path.join(header_path, 'cppscript_bindings.h')
 		defs = os.path.join(header_path, 'cppscript_defs.h')
 		godotcpp = os.path.join(header_path, cppscript_env['header_name'])
-		def generate_emitter(target, source, env):
-			generated = [env.File(bindings), env.File(defs), env.File(godotcpp)]
-			env.NoCache(generated)
-			return generated, source
 
-		def generate(target, source, env):
-			with open(bindings, 'w') as file:
-				file.write(CPPSCRIPT_BINDINGS_H)
-			with open(defs, 'w') as file:
-				file.write(CPPSCRIPT_DEFS_H)
-			with open(godotcpp, 'w') as file:
-				file.write(CPPSCRIPT_BODY_H.replace('@H_GUARD@', cppscript_env['header_name'].replace(' ', '_').replace('.', '_').upper()))
-		
 		def generate_header_emitter(target, source, env):
 			generated = [env.File(filename_to_gen_filename(str(i), env['cppscript_env'])) for i in source]
 
@@ -535,16 +501,15 @@ class CppScriptBuilder():
 
 			return generated, source
 
-		generator = Builder(action=generate, emitter=generate_emitter)(env)
 		builder = Builder(action=generate_header_scons, emitter=generate_header_emitter) \
 			(env, source=source, *other, *args, **kwargs)
-		#env.Depends(builder, generator)
 
 		return builder
 
 
 from clang.cindex import Index, TranslationUnit, CursorKind, TokenKind, AccessSpecifier
 import os, sys, json, hashlib, shutil
+from pathlib import Path
 
 ### CODE FORMAT ###
 # (...) explains arguments for .format(...) call
@@ -552,14 +517,37 @@ import os, sys, json, hashlib, shutil
 class code_format_godot_cpp:
 	DONOTEDIT_MSG = "/*-- GENERATED FILE - DO NOT EDIT --*/\n\n"
 
-	# (header_guard)
-	CPPSCRIPT_BODY = DONOTEDIT_MSG + \
-"""#ifndef {0}
-#define {0}
-#include <cppscript_defs.h>
-#include "properties.gen.h"
-#endif // {0}
+	# (CPPSCRIPT_DEFS_H, CPPSCRIPT_BINDINGS_H, header_guard, property_body, register_body)
+	CPPSCRIPT_MAIN_HEADER_TEMPLATE = DONOTEDIT_MSG + \
+"""#ifndef {2}
+#define {2}
+
+{0}
+
+
+{1}
+
+
+{3}
+
+#endif // {2}
+#ifdef CPPSCRIPT_REGISTER
+#ifndef {2}_REGISTER
+#define {2}_REGISTER
+
+{4}
+
+#endif // {2}_REGISTER
+#endif // CPPSCRIPT_REGISTER
 """
+# 	# (header_guard)
+# 	CPPSCRIPT_BODY = DONOTEDIT_MSG + \
+# """#ifndef {0}
+# #define {0}
+# #include <cppscript_defs.h>
+# #include "properties.gen.h"
+# #endif // {0}
+# """
 
 	# (rpc_mode, transfer_mode, call_local, method_name)
 	RPC_CONFIG_BODY = \
@@ -655,6 +643,49 @@ struct StaticAccess {{
 
 	#(CLASS_TYPE, class_name)
 	REGISTER_CLASS = '\tGDREGISTER_{0}({1});\n'
+
+	#(level_inits_deinits)
+	CLASSES_REGISTER = \
+"""
+{0}
+void _cppscript_initialize_module(::godot::ModuleInitializationLevel p_level) {{
+	switch (p_level) {{
+		case MODULE_INITIALIZATION_LEVEL_CORE:
+			_register_level_core();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_SERVERS:
+			_register_level_servers();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_SCENE:
+			_register_level_scene();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_EDITOR:
+			_register_level_editor();
+			break;
+		default:
+			break;
+	}}
+}}
+
+void _cppscript_uninitialize_module(::godot::ModuleInitializationLevel p_level) {{
+	switch (p_level) {{
+		case MODULE_INITIALIZATION_LEVEL_CORE:
+			_unregister_level_core();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_SERVERS:
+			_unregister_level_servers();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_SCENE:
+			_unregister_level_scene();
+			break;
+		case MODULE_INITIALIZATION_LEVEL_EDITOR:
+			_unregister_level_editor();
+			break;
+		default:
+			break;
+	}}
+}}
+"""
 
 
 class code_format_cppscript_constexr_checks(code_format_godot_cpp):
@@ -865,17 +896,32 @@ def generate_header_cmake(source, env):
 
 def generate_header(source, env, get_file):
 	index = Index.create()
-	prop_file_name = os.path.join(env['header_dir'], 'properties.gen.h') 
+	header_filename = os.path.join(env['header_dir'], env['header_name']) 
 
-	# Move properties file if exists to avoid infinite cycle for auto-genereted getter/setters:
+	# TODO: check if still exists
+	# Move header file if exists to avoid infinite cycle for auto-genereted getter/setters:
 	# no method definition -> generate one -> parse  | 
-	#     ^                                          V
-	#     |   do NOT generate one   <-     method exists
-	try:
-		shutil.move(prop_file_name, prop_file_name + '.tmp')
-	except:
-		pass
+	#	 ^										  V
+	#	 |   do NOT generate one   <-	 method exists
+	#
+	# try:
+	# 	shutil.move(header_filename, header_filename + '.tmp')
+	# except:
+	# 	pass
 
+	guard = env['header_name'].upper().replace('.', '_').replace('-', '_') + '_GUARD'
+	bindings_code = CPPSCRIPT_BINDINGS_H if type(env['code_format']) is code_format_cppscript_constexr_checks else ''
+
+	if not Path(header_filename).exists():
+		# Write file with no generated code yet but all definitions present
+		body = env['code_format'].CPPSCRIPT_MAIN_HEADER_TEMPLATE.format(
+				CPPSCRIPT_DEFS_H,
+				bindings_code,
+				guard, '', '')
+		with open(header_filename, 'w') as file:
+			file.write(body)
+
+	exitcode = 0
 	try:
 		defs_file_path = os.path.join(env['gen_dir'], 'defs.json')
 		cached_defs_all = load_defs_json(defs_file_path)
@@ -898,27 +944,32 @@ def generate_header(source, env, get_file):
 				new_defs_files |= {filename : cached_defs[filename]}
 
 		new_defs_all = {'hash' : cached_defs_all.get('hash', None), 'files' : new_defs_files}
-
-		if write_register_header(new_defs_all, env) or need_regen:
-			write_property_header(new_defs_all, env)
-			try:
-				os.remove(prop_file_name + '.tmp')
-			except:
-				pass
-		else:
-			try:
-				shutil.move(prop_file_name + '.tmp', prop_file_name)
-			except:
-				pass
-
 		with open(defs_file_path, 'w') as file:
 			json.dump(new_defs_all, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
 
+		register_body = build_register_body(new_defs_all, env)
+		new_hash = hashlib.md5(register_body.encode()).hexdigest()
+		if need_regen or new_hash != new_defs_all['hash']:
+			new_defs_all['hash'] = new_hash
+			property_body = build_property_body(new_defs_all, env)
+			body = env['code_format'].CPPSCRIPT_MAIN_HEADER_TEMPLATE.format(
+					CPPSCRIPT_DEFS_H,
+					bindings_code,
+					guard, property_body, register_body)
+			with open(header_filename, 'w') as file:
+				file.write(body)
+
+
 	except CppScriptException as e:
 		print(f'\n{e}\n', file=sys.stderr)
-		return 1
+		exitcode = 1
 
-	return 0
+	try:
+		shutil.move(header_filename + '.tmp', header_filename)
+	except:
+		pass
+
+	return exitcode
 
 def parse_header(index, filename, filecontent, env):
 	translation_unit = index.parse(filename, args=env['parser_args'] + ['-x', 'c++'], unsaved_files=[(filename, filecontent)], options=TranslationUnit.PARSE_DETAILED_PROCESSING_RECORD)
@@ -1389,7 +1440,7 @@ def write_header(file, defs, env):
 	gen_filename = filename_to_gen_filename(file, env)
 	content = ''
 	if len(defs) != 0:
-		header_include = '#include <cppscript_bindings.h>\n\n#include "{}"\n\nusing namespace godot;\n\n{}' \
+		header_include = '#include "{}"\n\n{}' \
 				.format(
 					os.path.relpath(file, os.path.dirname(gen_filename)).replace('\\', '/'),
 					('\n'.join(global_variables) + '\n\n' if global_variables != [] else ''))
@@ -1405,10 +1456,10 @@ def write_header(file, defs, env):
 		fileopen.write(content)
 
 
-def write_register_header(defs_all, env):
+def build_register_body(defs_all, env):
 	CODE_FORMAT = env['code_format']
 	target = os.path.join(env['header_dir'], 'scripts.gen.h')
-	scripts_header = CODE_FORMAT.DONOTEDIT_MSG
+	scripts_header = ''
 	classes_register_levels = {name[12:] : [] for name in INIT_LEVELS}
 	static_members_levels = {name[12:] : [] for name in INIT_LEVELS}
 
@@ -1452,7 +1503,6 @@ def write_register_header(defs_all, env):
 		if len(classes) == 0:
 			continue
 
-		scripts_header += '#include <cppscript_bindings.h>\n'
 		scripts_header += '#include "{}"\n'.format(os.path.relpath(file, os.path.dirname(target)).replace('\\', '/'))
 
 		for class_name_full, content in classes.items():
@@ -1486,8 +1536,8 @@ def write_register_header(defs_all, env):
 	else:
 		minimal_register_level = 'MODULE_INITIALIZATION_LEVEL_SCENE'
 
-	scripts_header += '\nusing namespace godot;\n\n' + \
-			f'static const ModuleInitializationLevel DEFAULT_INIT_LEVEL = {minimal_register_level};\n\n' + \
+	scripts_header += '\n\n' + \
+			f'#ifndef DEFAULT_INIT_LEVEL\n#define DEFAULT_INIT_LEVEL ::godot::{minimal_register_level}\n#endif // DEFAULT_INIT_LEVEL\n\n' + \
 			('\n'.join(loaders_savers) + '\n\n' if loaders_savers != [] else '')
 
 	for level_name, defs in classes_register_levels.items():
@@ -1513,24 +1563,14 @@ def write_register_header(defs_all, env):
 			level_name.lower(), '\n' + unregisters)
 
 	static_members_init_deinit_str = CODE_FORMAT.STATIC_ACCESS_CLASS_BODY.format(static_members_init_deinit_str)
-	scripts_header += static_members_init_deinit_str + classes_register_str
+	scripts_header += static_members_init_deinit_str + CODE_FORMAT.CLASSES_REGISTER.format(classes_register_str)
 
-	new_hash = hashlib.md5(scripts_header.encode()).hexdigest()
-
-	if new_hash != defs_all['hash']:
-		with open(target, 'w') as file:
-			file.write(scripts_header)
-		defs_all['hash'] = new_hash
-
-		return True
-
-	return False
+	return scripts_header
 
 
-def write_property_header(new_defs, env):
+def build_property_body(new_defs, env):
 	CODE_FORMAT = env['code_format']
-	filepath = os.path.join(env['header_dir'], 'properties.gen.h')
-	body = CODE_FORMAT.DONOTEDIT_MSG
+	body = ''
 	for filename, filecontent in new_defs['files'].items():
 		classcontent = filecontent['content']
 		for class_name_full, content in classcontent.items():
@@ -1542,8 +1582,6 @@ def write_property_header(new_defs, env):
 
 			body += f'#define GSETGET_{content["class_name"]}' + ''.join(gen_setgets) + '\n\n'
 
-	with open(filepath, 'w') as file:
-		file.write(body)
-
+	return body
 
 
