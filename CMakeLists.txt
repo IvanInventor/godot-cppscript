@@ -103,6 +103,10 @@ create_cppscript_target(
 	# or require GMETHOD() before methods
 	AUTO_METHODS
 
+	# Generate bind_methods with template wrappers
+	# that povide better compilation error logging
+	CONSTEXPR_CHECKS
+
 	# Optional
 
 	# C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
