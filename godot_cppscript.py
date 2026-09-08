@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # THIS FILE IS AUTO-GENERATED
 # See `https://github.com/IvanInventor/godot-cppscript/tree/next` for proper source
-
 CPPSCRIPT_DEFS_H = r'''
 #define GCLASS(CLASS_NAME, CLASS_NAME_INH) 								\
 	GDCLASS(CLASS_NAME , CLASS_NAME_INH)								\
@@ -284,229 +283,6 @@ struct StaticMethod {
 	}
 };
 '''
-
-
-import sys, os
-
-if __name__ == '__main__':
-    # Ran as configure script
-
-    REGISTER_TYPES_CPP_IN = r'''
-#include <gdextension_interface.h>
-
-#include <godot_cpp/core/class_db.hpp>
-#include <godot_cpp/core/defs.hpp>
-#include <godot_cpp/godot.hpp>
-
-// Include custom headers here
-
-#include "register_types.h"
-
-using namespace godot;
-
-void initialize_@LIBRARY_NAME@_module(ModuleInitializationLevel p_level) {
-	switch (p_level) {
-		case ::godot::MODULE_INITIALIZATION_LEVEL_CORE:
-			_register_level_core();
-			break;
-		case ::godot::MODULE_INITIALIZATION_LEVEL_SERVERS:
-			_register_level_servers();
-			break;
-		case ::godot::MODULE_INITIALIZATION_LEVEL_SCENE:
-			// Non-cppscript classes, static/global variables
-			// initialization here
-
-			_register_level_scene();
-			break;
-		case ::godot::MODULE_INITIALIZATION_LEVEL_EDITOR:
-			_register_level_editor();
-			break;
-		default:
-			break;
-	}
-}
-
-void uninitialize_@LIBRARY_NAME@_module(ModuleInitializationLevel p_level) {
-	switch (p_level) {
-		case ::godot::MODULE_INITIALIZATION_LEVEL_CORE:
-			_unregister_level_core();
-			break;
-		case ::godot::MODULE_INITIALIZATION_LEVEL_SERVERS:
-			_unregister_level_servers();
-			break;
-		case ::godot::MODULE_INITIALIZATION_LEVEL_SCENE:
-			// Non-cppscript classes, static/global variables
-			// deinitialization here
-
-			_unregister_level_scene();
-			break;
-		case ::godot::MODULE_INITIALIZATION_LEVEL_EDITOR:
-			_unregister_level_editor();
-			break;
-		default:
-			break;
-	}
-}
-
-extern "C" {
-// GDExtension initialization
-GDExtensionBool GDE_EXPORT @LIBRARY_NAME@_library_init(GDExtensionInterfaceGetProcAddress p_get_proc_address, GDExtensionClassLibraryPtr p_library, GDExtensionInitialization *r_initialization) {
-	godot::GDExtensionBinding::InitObject init_obj(p_get_proc_address, p_library, r_initialization);
-
-	init_obj.register_initializer(initialize_@LIBRARY_NAME@_module);
-	init_obj.register_terminator(uninitialize_@LIBRARY_NAME@_module);
-	init_obj.set_minimum_library_initialization_level(DEFAULT_INIT_LEVEL);
-
-	return init_obj.init();
-}
-}
-
-'''
-    REGISTER_TYPES_H_IN = r'''
-// Template file to use with godot-cppscript
-#ifndef REGISTER_TYPES_H
-#define REGISTER_TYPES_H
-
-#include <godot_cpp/core/class_db.hpp>
-
-#include "scripts.gen.h"
-
-void initialize_@LIBRARY_NAME@_module(godot::ModuleInitializationLevel p_level);
-void initialize_@LIBRARY_NAME@_module(godot::ModuleInitializationLevel p_level);
-
-#endif // REGISTER_TYPES_H
-'''
-    SCRIPTS_GDEXTENSION_IN = r'''
-[configuration]
-
-entry_symbol = "@LIBRARY_NAME@_library_init"
-compatibility_minimum = 4.1
-
-[libraries]
-
-macos.debug = "res://../bin/lib@LIBRARY_NAME@.macos.template_debug.framework"
-macos.release = "res://../bin/lib@LIBRARY_NAME@.macos.template_release.framework"
-windows.debug.x86_32 = "res://../bin/lib@LIBRARY_NAME@.windows.template_debug.x86_32.dll"
-windows.release.x86_32 = "res://../bin/lib@LIBRARY_NAME@.windows.template_release.x86_32.dll"
-windows.debug.x86_64 = "res://../bin/lib@LIBRARY_NAME@.windows.template_debug.x86_64.dll"
-windows.release.x86_64 = "res://../bin/lib@LIBRARY_NAME@.windows.template_release.x86_64.dll"
-linux.debug.x86_64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_debug.x86_64.so"
-linux.release.x86_64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_release.x86_64.so"
-linux.debug.arm64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_debug.arm64.so"
-linux.release.arm64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_release.arm64.so"
-linux.debug.rv64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_debug.rv64.so"
-linux.release.rv64 = "res://../bin/lib@LIBRARY_NAME@.linux.template_release.rv64.so"
-android.debug.x86_64 = "res://../bin/lib@LIBRARY_NAME@.android.template_debug.x86_64.so"
-android.release.x86_64 = "res://../bin/lib@LIBRARY_NAME@.android.template_release.x86_64.so"
-android.debug.arm64 = "res://../bin/lib@LIBRARY_NAME@.android.template_debug.arm64.so"
-android.release.arm64 = "res://../bin/lib@LIBRARY_NAME@.android.template_release.arm64.so"
-web.debug.wasm32 = "res://../bin/lib@LIBRARY_NAME@.web.template_debug.wasm32.wasm"
-'''
-
-
-    import os, sys
-    argv = sys.argv[1:]
-
-    try:
-        library_name = argv[0].replace('-', '_')
-        cpp_path = argv[1]
-        h_path = argv[2]
-        gdext_path = argv[3]
-    except:
-        print(
-            '',
-            'ERROR: Not enough arguments.',
-            'Needed arguments (<argument> - example):',
-            '',
-            '<library_name>              (`my_library_name`)',
-            '<cpp_file_path>             (`src/register_types.cpp`)',
-            '<header_file_path>          (`include/register_types.h`)',
-            '<gdextension_file_path>     (`project/my_library.gdextension`)',
-            '',
-	        sep='\n', file=sys.stderr)
-        exit(1)
-
-    print(
-        'These files will be affected:',
-        f'{"(New)     " if not os.path.exists(gdext_path) else "(Override)"} {gdext_path}',
-        f'{"(New)     " if not os.path.exists(cpp_path) else "(Override)"} {cpp_path}',
-        f'{"(New)     " if not os.path.exists(h_path) else "(Override)"} {h_path}',
-        sep='\n')
-    while True:
-        inp = input('Are you sure? (Y/N) ')
-        if inp == '':
-            continue
-        if inp not in 'yY':
-            print('No changes, exiting...')
-            exit(1)
-        break
-
-    print(f"Configuring '{gdext_path}' ...")
-    open(gdext_path, 'w').write(
-        SCRIPTS_GDEXTENSION_IN.replace('@LIBRARY_NAME@', library_name))
-
-    print(f"Configuring '{cpp_path}' ...")
-    open(cpp_path, 'w').write(
-        REGISTER_TYPES_CPP_IN.replace('@LIBRARY_NAME@', library_name))
-
-    print(f"Configuring '{h_path}' ...")
-    open(h_path, 'w').write(
-        REGISTER_TYPES_H_IN.replace('@LIBRARY_NAME@', library_name))
-
-    print("Files configured.")
-    exit(0)
-
-
-
-# Ran as module from SConstruct
-from SCons.Builder import Builder
-
-def create_cppscript_target(env, sources, cppscript_env, *args, **kwargs):
-	if not 'CppScript' in env['BUILDERS'].keys():
-		env.Append(BUILDERS={'CppScript' : CppScriptBuilder()})
-	
-	return env.CppScript(sources, cppscript_env, *args, **kwargs)
-
-class CppScriptBuilder():
-	def __call__(self, env, source, call_args, cwd = os.getcwd(), *args, **kwargs):
-		cppscript_env, *other = call_args
-		# Convert scons variables to cppscript's env
-		cppscript_env = {
-			'header_name' : cppscript_env['header_name'],
-			'header_dir' : resolve_path(str(cppscript_env['header_dir']), cwd),
-			'gen_dir' : resolve_path(str(cppscript_env['gen_dir']), cwd),
-			'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in cppscript_env.get('compile_defs', [])},
-			'include_paths' : {resolve_path(str(i), cwd) for i in [cppscript_env['header_dir']] + cppscript_env.get('include_paths', [])},
-			'auto_methods' : cppscript_env['auto_methods'],
-			'code_format' : code_format_godot_cpp()
-				if os.getenv("CPPSCRIPT_NO_CONSTEXPR_CHECKS", False)
-				else code_format_cppscript_constexr_checks()
-			}
-		env['cppscript_env'] = cppscript_env
-
-
-		# Generate embedded headers once
-		header_path = cppscript_env['header_dir']
-
-		bindings = os.path.join(header_path, 'cppscript_bindings.h')
-		defs = os.path.join(header_path, 'cppscript_defs.h')
-		godotcpp = os.path.join(header_path, cppscript_env['header_name'])
-
-		def generate_header_emitter(target, source, env):
-			generated = [env.File(filename_to_gen_filename(str(i), env['cppscript_env'])) for i in source]
-
-			env.NoCache(generated)
-			# To avoid generated sources deletion and re-parsing
-			env.Precious(generated)
-
-			return generated, source
-
-		builder = Builder(action=generate_header_scons, emitter=generate_header_emitter) \
-			(env, source=source, *other, *args, **kwargs)
-
-		return builder
-
-
 from clang.cindex import Index, TranslationUnit, CursorKind, TokenKind, AccessSpecifier
 import os, sys, json, hashlib, shutil
 from pathlib import Path
@@ -909,12 +685,13 @@ def generate_header(source, env, get_file):
 	# except:
 	# 	pass
 
+	code_format = code_format_cppscript_constexr_checks() if env['constexpr_checks'] else code_format_godot_cpp()
 	guard = env['header_name'].upper().replace('.', '_').replace('-', '_') + '_GUARD'
-	bindings_code = CPPSCRIPT_BINDINGS_H if type(env['code_format']) is code_format_cppscript_constexr_checks else ''
+	bindings_code = CPPSCRIPT_BINDINGS_H if env['constexpr_checks'] else ''
 
 	if not Path(header_filename).exists():
 		# Write file with no generated code yet but all definitions present
-		body = env['code_format'].CPPSCRIPT_MAIN_HEADER_TEMPLATE.format(
+		body = code_format.CPPSCRIPT_MAIN_HEADER_TEMPLATE.format(
 				CPPSCRIPT_DEFS_H,
 				bindings_code,
 				guard, '', '')
@@ -936,10 +713,13 @@ def generate_header(source, env, get_file):
 		new_defs_files = {}
 		for s in source:
 			filename, file_content = get_file(s)
-			new_hash = hashlib.md5(file_content.encode()).hexdigest()
+			h = hashlib.sha256()
+			h.update(b'True' if env['constexpr_checks'] else b'False')
+			h.update(file_content.encode())
+			new_hash = h.hexdigest()
 			if not os.path.exists(filename_to_gen_filename(filename, env)) or filename not in cached_defs.keys() or new_hash != cached_defs[filename]['hash']:
 				need_regen = True
-				new_defs_files |= {filename : {'content' : parse_and_write_header(index, filename, file_content, env), 'hash' : new_hash}}
+				new_defs_files |= {filename : {'content' : parse_and_write_header(code_format, index, filename, file_content, env), 'hash' : new_hash}}
 			else:
 				new_defs_files |= {filename : cached_defs[filename]}
 
@@ -947,12 +727,12 @@ def generate_header(source, env, get_file):
 		with open(defs_file_path, 'w') as file:
 			json.dump(new_defs_all, file, indent=2, default=lambda x: x if not isinstance(x, set) else list(x))
 
-		register_body = build_register_body(new_defs_all, env)
-		new_hash = hashlib.md5(register_body.encode()).hexdigest()
+		register_body = build_register_body(code_format, new_defs_all, env)
+		new_hash = hashlib.sha256(register_body.encode()).hexdigest()
 		if need_regen or new_hash != new_defs_all['hash']:
 			new_defs_all['hash'] = new_hash
-			property_body = build_property_body(new_defs_all, env)
-			body = env['code_format'].CPPSCRIPT_MAIN_HEADER_TEMPLATE.format(
+			property_body = build_property_body(code_format, new_defs_all, env)
+			body = code_format.CPPSCRIPT_MAIN_HEADER_TEMPLATE.format(
 					CPPSCRIPT_DEFS_H,
 					bindings_code,
 					guard, property_body, register_body)
@@ -1265,15 +1045,14 @@ def parse_header(index, filename, filecontent, env):
 	return parsed_classes
 
 
-def parse_and_write_header(index, filename, filecontent, env):
+def parse_and_write_header(code_format, index, filename, filecontent, env):
 	defs = parse_header(index, filename, filecontent, env)
-	write_header(filename, defs, env)
+	write_header(code_format, filename, defs, env)
 
 	return defs
 
 
-def write_header(file, defs, env):
-	CODE_FORMAT = env['code_format']
+def write_header(code_format, file, defs, env):
 	header_defs = []
 	global_variables = []
 	for class_name_full, content in defs.items():
@@ -1287,15 +1066,15 @@ def write_header(file, defs, env):
 		for method in content['methods']:
 			if 'varargs' not in method.keys():
 				args = ''.join(
-						CODE_FORMAT.ARGNAMES_SEPARATOR.format(argname)
+						code_format.ARGNAMES_SEPARATOR.format(argname)
 							if argname != '' else '' for argtype, argname, _ in method['args'])
 
 				defvals = ''.join(
-						CODE_FORMAT.DEFAULT_VALUES_SEPARATOR.format(defval)
+						code_format.DEFAULT_VALUES_SEPARATOR.format(defval)
 							for _, _, defval in method['args'] if defval != '')
 
 				if method['is_static']:
-					Hstatic_method += CODE_FORMAT.STATIC_METHOD_REGISTER.format(
+					Hstatic_method += code_format.STATIC_METHOD_REGISTER.format(
 						class_name,
 						method["name"],
 						method["bind_name"],
@@ -1309,7 +1088,7 @@ def write_header(file, defs, env):
 				#	Hvirtual_method += f'\tMethod<&{class_name}::{method["name"]}>::bind_virtual("{method["bind_name"]}"{defvals});\n'
 
 				else:
-					Hmethod += CODE_FORMAT.METHOD_REGISTER.format(
+					Hmethod += code_format.METHOD_REGISTER.format(
 						class_name,
 						method["name"],
 						method["bind_name"],
@@ -1319,7 +1098,7 @@ def write_header(file, defs, env):
 
 				if 'rpc_config' in method.keys():
 					has_rpc_config = True
-					header_rpc_config += CODE_FORMAT.RPC_CONFIG_BODY.format(
+					header_rpc_config += code_format.RPC_CONFIG_BODY.format(
 						method['rpc_config']['rpc_mode'],
 						method['rpc_config']['transfer_mode'],
 						method['rpc_config']['call_local'],
@@ -1327,9 +1106,9 @@ def write_header(file, defs, env):
 						method["name"]
 						)
 			else:
-				args_list = CODE_FORMAT.expand_property_info_list(method['varargs'])
+				args_list = code_format.expand_property_info_list(method['varargs'])
 
-				Hvaragr_method += CODE_FORMAT.VARARG_REGISTER.format(
+				Hvaragr_method += code_format.VARARG_REGISTER.format(
 					class_name,
 					method["name"],
 					method["bind_name"],
@@ -1339,14 +1118,14 @@ def write_header(file, defs, env):
 		prev_group, prev_subgroup = '', ''
 		for prop in content['properties']:
 			if prop['getter'] not in methods_list:
-				Hmethod += CODE_FORMAT.METHOD_REGISTER.format(
+				Hmethod += code_format.METHOD_REGISTER.format(
 					class_name,
 					prop["getter"],
 					prop["getter"],
 					'',
 					''
 					)
-				property_set_get_defs += CODE_FORMAT.GENERATE_GETTER.format(
+				property_set_get_defs += code_format.GENERATE_GETTER.format(
 					class_name_full,
 					prop["getter"],
 					prop["name"],
@@ -1355,14 +1134,14 @@ def write_header(file, defs, env):
 				gen_getters.append([prop["getter"], prop["name"]])
 
 			if prop['setter'] not in methods_list:
-				Hmethod += CODE_FORMAT.METHOD_REGISTER.format(
+				Hmethod += code_format.METHOD_REGISTER.format(
 					class_name,
 					prop["setter"],
 					prop["setter"],
 					', "value"',
 					''
 					)
-				property_set_get_defs += CODE_FORMAT.GENERATE_SETTER.format(
+				property_set_get_defs += code_format.GENERATE_SETTER.format(
 					class_name_full,
 					prop["setter"],
 					prop["name"],
@@ -1373,18 +1152,18 @@ def write_header(file, defs, env):
 			group, subgroup = prop['group'], prop['subgroup']
 			group_ = group_name(group)
 			if group != '' and group != prev_group:
-				Hprop += CODE_FORMAT.ADD_GROUP.format(group, group_)
+				Hprop += code_format.ADD_GROUP.format(group, group_)
 				prev_group = group
 
 			subgroup_ = group_name(subgroup)
 			if subgroup != '' and subgroup != prev_subgroup:
-				Hprop += CODE_FORMAT.ADD_SUBGROUP.format(subgroup, subgroup_)
+				Hprop += code_format.ADD_SUBGROUP.format(subgroup, subgroup_)
 				prev_subgroup = subgroup
 
 			prop_name = group_ + subgroup_ + prop['name']
-			hints = CODE_FORMAT.PROPERTY_HINTS.format(prop["hint"], prop["args"]) if prop['hint'] != None else ''
-			Hprop += CODE_FORMAT.ADD_PROPERTY.format(
-				CODE_FORMAT.PROPERTY_INFO.format(f'decltype({prop["name"]})', prop_name, hints),
+			hints = code_format.PROPERTY_HINTS.format(prop["hint"], prop["args"]) if prop['hint'] != None else ''
+			Hprop += code_format.ADD_PROPERTY.format(
+				code_format.PROPERTY_INFO.format(f'decltype({prop["name"]})', prop_name, hints),
 				prop["setter"],
 				prop["getter"]
 				)
@@ -1393,25 +1172,25 @@ def write_header(file, defs, env):
 		defs[class_name_full]['gen_getters'] = gen_getters
 
 		for signal_name, args in content['signals']:
-			args_str = '\n'.join('\t\t,' + CODE_FORMAT.PROPERTY_INFO.format(arg_type, arg_name, '')
+			args_str = '\n'.join('\t\t,' + code_format.PROPERTY_INFO.format(arg_type, arg_name, '')
 				for arg_type, arg_name in args)
-			Hsignal += CODE_FORMAT.ADD_SIGNAL.format(
+			Hsignal += code_format.ADD_SIGNAL.format(
 				signal_name,
 				'\n' + args_str + '\n\t\t' if args_str != '' else ''
 				)
 
 		for enum, consts in content['enum_constants'].items():
-			outside_bind += CODE_FORMAT.VARIANT_ENUM_CAST.format(enum)
+			outside_bind += code_format.VARIANT_ENUM_CAST.format(enum)
 			for const in consts:
-				Henum += CODE_FORMAT.BIND_ENUM_CONSTANT.format(const)
+				Henum += code_format.BIND_ENUM_CONSTANT.format(const)
 
 		for enum, consts in content['bitfields'].items():
-			outside_bind += CODE_FORMAT.VARIANT_BITFIELD_CAST.format(enum)
+			outside_bind += code_format.VARIANT_BITFIELD_CAST.format(enum)
 			for const in consts:
-				Hbitfield += CODE_FORMAT.BIND_BITFIELD_FLAG.format(const)
+				Hbitfield += code_format.BIND_BITFIELD_FLAG.format(const)
 
 		for const in content['constants']:
-			Hconst += CODE_FORMAT.BIND_CONSTANT.format(const)
+			Hconst += code_format.BIND_CONSTANT.format(const)
 
 		if 'is_resource_loader' in content:
 			variable_name = content["class_name"] + '_loader'
@@ -1449,15 +1228,14 @@ def write_header(file, defs, env):
 			header_include = '#include <godot_cpp/classes/multiplayer_api.hpp>\n' + header_include
 			header_include = '#include <godot_cpp/classes/multiplayer_peer.hpp>\n' + header_include
 
-		content = CODE_FORMAT.DONOTEDIT_MSG + header_include + '\nusing namespace godot;\n\n' + '\n'.join(header_defs)
+		content = code_format.DONOTEDIT_MSG + header_include + '\nusing namespace godot;\n\n' + '\n'.join(header_defs)
 
 	os.makedirs(os.path.dirname(gen_filename), exist_ok=True)
 	with open(gen_filename, 'w') as fileopen:
 		fileopen.write(content)
 
 
-def build_register_body(defs_all, env):
-	CODE_FORMAT = env['code_format']
+def build_register_body(code_format, defs_all, env):
 	target = os.path.join(env['header_dir'], 'scripts.gen.h')
 	scripts_header = ''
 	classes_register_levels = {name[12:] : [] for name in INIT_LEVELS}
@@ -1466,7 +1244,7 @@ def build_register_body(defs_all, env):
 	loaders_savers = []
 	has_singleton = False
 	def make_register_str_pair(class_name_full, content):
-		register_str = CODE_FORMAT.REGISTER_CLASS.format(content['type'], class_name_full)
+		register_str = code_format.REGISTER_CLASS.format(content['type'], class_name_full)
 		unregister_str = ''
 
 		static_members_levels[content['init_level']] += \
@@ -1562,26 +1340,69 @@ def build_register_body(defs_all, env):
 		classes_register_str += '_FORCE_INLINE_ void _unregister_level_{}() {{{}}}\n\n'.format(
 			level_name.lower(), '\n' + unregisters)
 
-	static_members_init_deinit_str = CODE_FORMAT.STATIC_ACCESS_CLASS_BODY.format(static_members_init_deinit_str)
-	scripts_header += static_members_init_deinit_str + CODE_FORMAT.CLASSES_REGISTER.format(classes_register_str)
+	static_members_init_deinit_str = code_format.STATIC_ACCESS_CLASS_BODY.format(static_members_init_deinit_str)
+	scripts_header += static_members_init_deinit_str + code_format.CLASSES_REGISTER.format(classes_register_str)
 
 	return scripts_header
 
 
-def build_property_body(new_defs, env):
-	CODE_FORMAT = env['code_format']
+def build_property_body(code_format, new_defs, env):
 	body = ''
 	for filename, filecontent in new_defs['files'].items():
 		classcontent = filecontent['content']
 		for class_name_full, content in classcontent.items():
 			gen_setgets = [
-				' \\\n' + CODE_FORMAT.GENERATE_GETTER_DECLARATION.format(method, next(prop['type'] for prop in content['properties'] if prop['name'] == property))
+				' \\\n' + code_format.GENERATE_GETTER_DECLARATION.format(method, next(prop['type'] for prop in content['properties'] if prop['name'] == property))
 					for method, property in content['gen_getters']] + [
-				' \\\n' + CODE_FORMAT.GENERATE_SETTER_DECLARATION.format(method, next(prop['type'] for prop in content['properties'] if prop['name'] == property))
+				' \\\n' + code_format.GENERATE_SETTER_DECLARATION.format(method, next(prop['type'] for prop in content['properties'] if prop['name'] == property))
 					for method, property in content['gen_setters']]
 
 			body += f'#define GSETGET_{content["class_name"]}' + ''.join(gen_setgets) + '\n\n'
 
 	return body
 
+import sys, os
+from SCons.Builder import Builder
 
+def create_cppscript_target(env, sources, cppscript_env, *args, **kwargs):
+	if not 'CppScript' in env['BUILDERS'].keys():
+		env.Append(BUILDERS={'CppScript' : CppScriptBuilder()})
+	
+	return env.CppScript(sources, cppscript_env, *args, **kwargs)
+
+class CppScriptBuilder():
+	def __call__(self, env, source, call_args, cwd = os.getcwd(), *args, **kwargs):
+		cppscript_env, *other = call_args
+		# Convert scons variables to cppscript's env
+		cppscript_env = {
+			'header_name' : cppscript_env['header_name'],
+			'header_dir' : resolve_path(str(cppscript_env['header_dir']), cwd),
+			'gen_dir' : resolve_path(str(cppscript_env['gen_dir']), cwd),
+			'compile_defs' : {f'{i[0]}={i[1]}' if type(i) is tuple else str(i) for i in cppscript_env.get('compile_defs', [])},
+			'include_paths' : {resolve_path(str(i), cwd) for i in [cppscript_env['header_dir']] + cppscript_env.get('include_paths', [])},
+			'auto_methods' : cppscript_env.get('auto_methods', True),
+			'constexpr_checks' : cppscript_env.get('constexpr_checks', True)
+			}
+		env['cppscript_env'] = cppscript_env
+
+
+		# Generate embedded headers once
+		header_path = cppscript_env['header_dir']
+
+		bindings = os.path.join(header_path, 'cppscript_bindings.h')
+		defs = os.path.join(header_path, 'cppscript_defs.h')
+		godotcpp = os.path.join(header_path, cppscript_env['header_name'])
+
+		def generate_header_emitter(target, source, env):
+			generated = [env.File(filename_to_gen_filename(str(i), env['cppscript_env'])) for i in source]
+
+			env.NoCache(generated)
+			# To avoid generated sources deletion and re-parsing
+			env.Precious(generated)
+
+			return generated, source
+
+		builder = Builder(action=generate_header_scons, emitter=generate_header_emitter) \
+			(env, source=source, *other, *args, **kwargs)
+
+		return builder
