@@ -42,7 +42,7 @@ Copy `godot_cppscript.*` to your project
   Recommended project layout
   ```
   /                   project root
-  ├── project 	    godot project root (res://)
+  ├── project       godot project root (res://)
   ├── bin             compiled binaries
   ├── external        submodules
   │   ├── cppscript
@@ -55,191 +55,165 @@ Copy `godot_cppscript.*` to your project
   $ git submodule add https://github.com/IvanInventor/godot-cppscript external/cppscript
   $ git submodule update --init external/cppscript
   ```
-##### Generate files
-Once per project, need to copy/modify some files (library_name = 'scripts', for example)
-  - `.gdextension` file
-  - `register_types.cpp`
-  - `register_types.h`
+- Modify some files to enable cppscript
+  - Create cppscript target in your build script
+    - SCons
+    ```python
+    from godot_cppscript import create_cppscript_target
+    import glob
+  
+    # ...
+  
+    # Get list of headers (Prefer *.hpp files)
+    scripts = glob.glob('src/**/*.hpp', recursive=True)
+  
+    generated = create_cppscript_target(
+            env,      # SCons env, env.Clone() for different projects
+            scripts,  # Header files to parse
 
-Don't worry, you will still be able to add custom code to this files after configuring
+            # CppScript config
+            {
+            # Name of header to be included to enable cppscript
+            # (Prefer name unique to your project)
+            'header_name' : 'cppscript.h',
 
-- By script
-    - With Python
-    ```bash
-    # Usage:
-    # python3 path/to/godot_cppscript.py
-    # <library_name>              (`my_library_name`)
-    # <cpp_file_path>             (`src/register_types.cpp`)
-    # <header_file_path>          (`include/register_types.h`)
-    # <gdextension_file_path>     (`project/my_library.gdextension`)
-    $ python3 godot_cppscript.py scripts src/register_types.cpp src/register_types.h project/scripts.gdextension
-    These files will be affected:
-        (Override) project/scripts.gdextension
-        (Override) src/register_types.cpp
-        (Override) src/register_types.h
+            # Path to C++ header files
+            'header_dir' : SRC_DIR,
 
-    Are you sure? (Y/N) Y
-    Configuring 'project/scripts.gdextension' ...
-    Configuring 'src/register_types.cpp' ...
-    Configuring 'src/register_types.h' ...
-    Files configured.
+            # Path to generated object files
+            'gen_dir' : GEN_DIR,
+
+            # Generate bindings to public methods automatically
+            # or require GMETHOD() before methods
+            'auto_methods' : True,
+
+            # Generate bind_methods with template wrappers
+            # that povide better compilation error logging
+            'constexpr_checks': True,
+
+            # Optional
+
+            ## C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
+            ## Enable, if you conditionally enable classes/members
+            ## based on definitions
+            'compile_defs' : env['CPPDEFINES'],
+            #
+            ## Include paths
+            ## (Try to avoid godot-cpp headers paths,
+            ## it slows parsing drastically)
+            #'include_paths' : env['CPPPATH']
+            }
+    )
+    
+    # Include headers path (if not done already)
+    env.Append(CPPPATH='src')
+  
+    # Your project's target generation
+    # You only need to modify it
+    library = env.SharedLibrary(
+        ".bin/{}/{}".format(env['platform'], lib_filename),
+        #source=sources,
+        source=sources + generated, # Add generated source files to target
+    )
+    
+    # Rebuild after headers change
+    env.Depends(library[0].sources, generated)
     ```
+    
+    - Cmake
+    ```cmake
+    include(${CMAKE_CURRENT_SOURCE_DIR}/godot_cppscript.cmake)
+    
+    # Get header files (Prefer .hpp files)
+    file(GLOB_RECURSE CPPSCRIPT_HEADERS src/*.hpp)
+    
+    # Call function to configure your target
+    create_cppscript_target(
+        # Name of header to be included to enable cppscript
+        # (Prefer name unique to your project)
+        HEADER_NAME
+            cppscript.h
+
+        # Header files to parse (.hpp only)
+        HEADERS_LIST
+            ${CPPSCRIPT_HEADERS}
+
+        # FULL PATH to C++ header files
+        HEADERS_DIR
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
         
-    ***OR***
-  
-  - With cmake
-    ```bash
-    # Usage:
-    # cmake -P path/to/godot_cppscript.cmake
-    # <library_name>              (`my_library_name`)
-    # <cpp_file_path>             (`src/register_types.cpp`)
-    # <header_file_path>          (`include/register_types.h`)
-    # <gdextension_file_path>     (`project/my_library.gdextension`)
-    $ cmake -P godot_cppscript.cmake scripts src/register_types.cpp src/register_types.h project/scripts.gdextension
-    These files will be affected:
-        (Override) project/scripts.gdextension
-        (Override) src/register_types.cpp
-        (Override) src/register_types.h
+        # Variable name for generated sources list
+        OUTPUT_SOURCES
+            GEN_SOURCES
 
-    Are you sure? (Y/N) Y
-    Configuring 'project/scripts.gdextension' ...
-    Configuring 'src/register_types.cpp' ...
-    Configuring 'src/register_types.h' ...
-    Files configured.
+        # Generate bindings to public methods automatically
+        # or require GMETHOD() before methods
+        AUTO_METHODS
+
+        # Generate bind_methods with template wrappers
+        # that povide better compilation error logging
+        CONSTEXPR_CHECKS
+
+        # Optional
+
+        # C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
+        # Enable, if you conditionally enable classes/members
+        # based on definitions
+        #
+         COMPILE_DEFS
+            $<TARGET_PROPERTY:${LIBNAME},COMPILE_DEFINITIONS>
+
+        # Include paths
+        # (Try to avoid godot-cpp headers paths,
+        # it slows parsing drastically)
+        #
+        # INCLUDE_PATHS
+        # $<TARGET_PROPERTY:${LIBNAME},INCLUDE_DIRECTORIES>
+    )
+    
+    # Add sources to your target
+    target_sources(
+        ${LIBNAME}
+         PRIVATE ${GEN_SOURCES}
+    )
+
+    # Include headers path (if not done already)
+    target_include_directories(${LIBNAME} PRIVATE
+        src
+    )
     ```
+  - Modify your register_types.hpp
+  ```cpp
+  // Add after all header includes
 
-    ***OR***
-  
-  - By hand, replacing `@LIBRARY_NAME@` in files with you library name
-    - [templates/scripts.gdextension.in](https://github.com/IvanInventor/godot-cppscript/blob/next/templates/scripts.gdextension.in) -> project/<library_name>.gdextension
-    - [templates/register_types.cpp.in](https://github.com/IvanInventor/godot-cppscript/blob/next/templates/register_types.cpp.in) -> src/register_types.cpp
-    - [templates/register_types.h.in](https://github.com/IvanInventor/godot-cppscript/blob/next/templates/register_types.h.in) -> src/register_types.h
+    #define CPPSCRIPT_REGISTER
+    #include <cppscript.h>
 
-- Create cppscript target in your build script
-  - SCons
-  ```python
-  from godot_cppscript import create_cppscript_target
-  import glob
+    // ...
 
-  # ...
 
-  # Get list of headers (Prefer *.hpp files)
-  scripts = glob.glob('src/**/*.hpp', recursive=True)
+    void initialize_cppscript_example_name_module(ModuleInitializationLevel p_level) {
+        // Add function call to the top of init function
+        _cppscript_initialize_module(p_level);
 
-  # Create target, returns generated .cpp files list
-  generated = create_cppscript_target(
-  		env,		# SCons env, env.Clone() for different projects
-  		scripts,	# Header files to parse
-  
-  		# CppScript config
-  		{
-  		# Name of header to be included to enable cppscript
-  		# (Prefer name unique to your project)
-  		'header_name' : 'cppscript.h',
-  
-  		# Path to C++ header files
-  		'header_dir' : 'src',
-  
-  		# Path to generated object files
-  		'gen_dir' : ".gen",
-  
-  		# Generate bindings to public methods automatically
-  		# or require GMETHOD() before methods
-  		'auto_methods' : True,
-  
-  		# Optional
-  
-  		## C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
-  		## Enable, if you conditionally enable classes/members
-  		## based on definitions
-  		'compile_defs' : env['CPPDEFINES'],
-  		#
-  		## Include paths
-  		## (Try to avoid godot-cpp headers paths,
-  		## it slows parsing drastically)
-  		#'include_paths' : env['CPPPATH']
-  		}
-  )
-  
-  # Include headers path (if not done already)
-  env.Append(CPPPATH='src')
+        // ...
+    }
 
-  # Your project's target generation
-  # You only need to modify it
-  if env["platform"] == "macos":
-      library = env.SharedLibrary(
-  	"bin/lib{}.{}.{}.framework/lib{}.{}.{}".format(
-  	library_name, env["platform"], env["target"], library_name, env["platform"], env["target"]
-  	),
-  	# source=sources
-  	source=sources + generated, # Add generated source files to target
-      )
-  else:
-      library = env.SharedLibrary(
-  	"bin/lib{}{}{}".format(library_name, env["suffix"], env["SHLIBSUFFIX"]),
-  	# source=sources
-  	source=sources + generated, # Add generated source files to target
-      )
-  
-  # Rebuild after headers change
-  env.Depends(library[0].sources, generated)
+    void uninitialize_cppscript_example_name_module(ModuleInitializationLevel p_level) {
+        // Add function call to the top of deinit function
+        _cppscript_uninitialize_module(p_level);
+
+        // ...
+    }
+
+    // Change minimum init level (really only needed if you constantly experiment with core/server classes)
+
+    //init_obj.set_minimum_library_initialization_level(MODULE_INITIALIZATION_LEVEL_SCENE);
+    init_obj.set_minimum_library_initialization_level(DEFAULT_INIT_LEVEL); // DEFAULT_INIT_LEVEL macro
+
   ```
-  
-  - Cmake
-  ```cmake
-  include(${CMAKE_CURRENT_SOURCE_DIR}/godot_cppscript.cmake)
-  
-  # Get header files (Prefer .hpp files)
-  file(GLOB_RECURSE CPPSCRIPT_HEADERS src/*.hpp)
-  
-  # Call function to create cppscript target
-  create_cppscript_target(
-  	# Name of header to be included to enable cppscript
-  	# (Prefer name unique to your project)
-  	HEADER_NAME
-  		cppscript.h
-  
-  	# Header files to parse (.hpp only)
-  	HEADERS_LIST
-  		${CPPSCRIPT_HEADERS}
-  
-  	# FULL PATH to C++ header files
-  	HEADERS_DIR
-  		${CMAKE_CURRENT_SOURCE_DIR}/src
-  	
-  	# Variable name for generated sources list
-  	OUTPUT_SOURCES
-  		GEN_SOURCES
-  
-  	# Generate bindings to public methods automatically
-  	# or require GMETHOD() before methods
-  	AUTO_METHODS
-  
-  	# Optional
-  
-  	# C++ defines (TOOLS_ENABLED, DEBUG_METHODS etc.)
-  	# Enable, if you conditionally enable classes/members
-  	# based on definitions
-  	#
-  	 COMPILE_DEFS
-  	 	$<TARGET_PROPERTY:${PROJECT_NAME},COMPILE_DEFINITIONS>
-  
-  	# Include paths
-  	# (Try to avoid godot-cpp headers paths,
-  	# it slows parsing drastically)
-  	#
-  	# INCLUDE_PATHS
-  	# 	$<TARGET_PROPERTY:${PROJECT_NAME},INCLUDE_DIRECTORIES>
-  )
-  
-  # Add sources to your target
-  target_sources(${PROJECT_NAME} PRIVATE ${GEN_SOURCES})
-  
-  # Include headers path (if not done already)
-  target_include_directories(${PROJECT_NAME} PRIVATE
-  	src
-  )
-  ```
+And that's it, cppscript is fully ready!
+
 
 ## Usage example
 
@@ -377,101 +351,198 @@ public:
 
 ```
 #### Generated code
+- With templates for better compilation error logging)
 ```cpp
 /*-- GENERATED FILE - DO NOT EDIT --*/
 
-#include <cppscript_bindings.h>
+#include <godot_cpp/classes/multiplayer_peer.hpp>
+#include <godot_cpp/classes/multiplayer_api.hpp>
+#include "../../src/example_gen.hpp"
 
-#include "../src/example_for_repo.hpp"
 
 using namespace godot;
 
 // ExampleForRepo : Control
 
 void ExampleForRepo::_bind_methods() {
-    Method<&ExampleForRepo::set_custom_position>::bind(D_METHOD("set_custom_position", "pos"));
-    Method<&ExampleForRepo::get_custom_position>::bind(D_METHOD("get_custom_position"));
-    Method<&ExampleForRepo::simple_func>::bind(D_METHOD("simple_func"));
-    Method<&ExampleForRepo::simple_const_func>::bind(D_METHOD("simple_const_func"));
-    Method<&ExampleForRepo::image_ref_func>::bind(D_METHOD("image_ref_func", "p_image"));
-    Method<&ExampleForRepo::image_const_ref_func>::bind(D_METHOD("image_const_ref_func", "p_image"));
-    Method<&ExampleForRepo::return_something>::bind(D_METHOD("return_something", "base"));
-    Method<&ExampleForRepo::return_something_const>::bind(D_METHOD("return_something_const"));
-    Method<&ExampleForRepo::def_args>::bind(D_METHOD("def_args", "p_a", "p_b"), DEFVAL(100), DEFVAL(200));
-    Method<&ExampleForRepo::def_args_string>::bind(D_METHOD("def_args_string", "s"), DEFVAL(String("default")));
-    Method<&ExampleForRepo::rpc_example>::bind(D_METHOD("rpc_example", "p_value"));
-    Method<&ExampleForRepo::rpc_example2>::bind(D_METHOD("rpc_example2"));
-    Method<&ExampleForRepo::register_this>::bind(D_METHOD("register_this"));
-    Method<&ExampleForRepo::virtual_example>::bind(D_METHOD("virtual_example"));
-    Method<&ExampleForRepo::get_float_auto>::bind(D_METHOD("get_float_auto"));
-    Method<&ExampleForRepo::set_float_auto>::bind(D_METHOD("set_float_auto", "value"));
-    Method<&ExampleForRepo::get_float_hint>::bind(D_METHOD("get_float_hint"));
-    Method<&ExampleForRepo::set_float_hint>::bind(D_METHOD("set_float_hint", "value"));
+	Method<&ExampleForRepo::set_custom_position>::bind(D_METHOD("set_custom_position", "pos"));
+	Method<&ExampleForRepo::get_custom_position>::bind(D_METHOD("get_custom_position"));
+	Method<&ExampleForRepo::simple_func>::bind(D_METHOD("simple_func"));
+	Method<&ExampleForRepo::simple_const_func>::bind(D_METHOD("simple_const_func"));
+	Method<&ExampleForRepo::image_ref_func>::bind(D_METHOD("image_ref_func", "p_image"));
+	Method<&ExampleForRepo::image_const_ref_func>::bind(D_METHOD("image_const_ref_func", "p_image"));
+	Method<&ExampleForRepo::return_something>::bind(D_METHOD("return_something", "base"));
+	Method<&ExampleForRepo::return_something_const>::bind(D_METHOD("return_something_const"));
+	Method<&ExampleForRepo::def_args>::bind(D_METHOD("def_args", "p_a", "p_b"), DEFVAL(100), DEFVAL(200));
+	Method<&ExampleForRepo::def_args_string>::bind(D_METHOD("def_args_string", "s"), DEFVAL(String("default")));
+	Method<&ExampleForRepo::rpc_example>::bind(D_METHOD("rpc_example", "p_value"));
+	Method<&ExampleForRepo::rpc_example2>::bind(D_METHOD("rpc_example2"));
+	Method<&ExampleForRepo::register_this>::bind(D_METHOD("register_this"));
+	Method<&ExampleForRepo::virtual_example>::bind(D_METHOD("virtual_example"));
+	Method<&ExampleForRepo::get_float_auto>::bind(D_METHOD("get_float_auto"));
+	Method<&ExampleForRepo::set_float_auto>::bind(D_METHOD("set_float_auto", "value"));
+	Method<&ExampleForRepo::get_float_hint>::bind(D_METHOD("get_float_hint"));
+	Method<&ExampleForRepo::set_float_hint>::bind(D_METHOD("set_float_hint", "value"));
 
 
-    StaticMethod<&ExampleForRepo::test_static>::bind(get_class_static(), D_METHOD("test_static", "p_a", "p_b"));
+	StaticMethod<&ExampleForRepo::test_static>::bind(get_class_static(), D_METHOD("test_static", "p_a", "p_b"));
 
 
-    Method<&ExampleForRepo::varargs_func_example>::bind_vararg("varargs_func_example"
-        ,MakePropertyInfo<String>("named_arg")
-        ,MakePropertyInfo<Variant>("unnamed_arg")
-        );
+	Method<&ExampleForRepo::varargs_func_example>::bind_vararg("varargs_func_example"
+		,MakePropertyInfo<String>("named_arg")
+		,MakePropertyInfo<Variant>("unnamed_arg")
+		);
 
 
-    ADD_GROUP("Group", "group_");
-    ADD_SUBGROUP("Subgroup", "group_subgroup_");
-        ADD_PROPERTY(MakePropertyInfo<decltype(custom_position)>("group_subgroup_custom_position"), "set_custom_position", "get_custom_position");
-        ADD_PROPERTY(MakePropertyInfo<decltype(float_auto)>("group_subgroup_float_auto"), "set_float_auto", "get_float_auto");
-        ADD_PROPERTY(MakePropertyInfo<decltype(float_hint)>("group_subgroup_float_hint", PROPERTY_HINT_RANGE, "0,1000,5"), "set_float_hint", "get_float_hint");
+	ADD_GROUP("Group", "group_");
+	ADD_SUBGROUP("Subgroup", "subgroup_");
+		ADD_PROPERTY(MakePropertyInfo<decltype(custom_position)>("group_subgroup_custom_position"), "set_custom_position", "get_custom_position");
+		ADD_PROPERTY(MakePropertyInfo<decltype(float_auto)>("group_subgroup_float_auto"), "set_float_auto", "get_float_auto");
+		ADD_PROPERTY(MakePropertyInfo<decltype(float_hint)>("group_subgroup_float_hint", PROPERTY_HINT_RANGE, "0,1000,5"), "set_float_hint", "get_float_hint");
 
 
-    ADD_SIGNAL(MethodInfo("example_signal"
-        ,MakePropertyInfo<float>("typed_arg")
-        ,MakePropertyInfo<Variant>("untyped_arg")
-        ));
+	ADD_SIGNAL(MethodInfo("example_signal"
+		,MakePropertyInfo<float>("typed_arg")
+		,MakePropertyInfo<Variant>("untyped_arg")
+		));
 
 
-    BIND_ENUM_CONSTANT(FIRST);
-    BIND_ENUM_CONSTANT(ANSWER_TO_EVERYTHING);
+	BIND_ENUM_CONSTANT(FIRST);
+	BIND_ENUM_CONSTANT(ANSWER_TO_EVERYTHING);
 
 
-    BIND_BITFIELD_FLAG(FLAG_ONE);
-    BIND_BITFIELD_FLAG(FLAG_TWO);
-    BIND_BITFIELD_FLAG(FLAG_THREE);
+	BIND_BITFIELD_FLAG(FLAG_ONE);
+	BIND_BITFIELD_FLAG(FLAG_TWO);
+	BIND_BITFIELD_FLAG(FLAG_THREE);
 
 
-    BIND_CONSTANT(CONSTANT_WITHOUT_ENUM);
+	BIND_CONSTANT(CONSTANT_WITHOUT_ENUM);
 }
 
 void ExampleForRepo::_rpc_config() {
-    {
-    Dictionary opts;
-    opts["rpc_mode"] = MultiplayerAPI::RPC_MODE_AUTHORITY;
-    opts["transfer_mode"] = MultiplayerPeer::TRANSFER_MODE_RELIABLE;
-    opts["call_local"] = true;
-    opts["channel"] = 0;
-    rpc_config("rpc_example", opts);
-    }
-    {
-    Dictionary opts;
-    opts["rpc_mode"] = MultiplayerAPI::RPC_MODE_ANY_PEER;
-    opts["transfer_mode"] = MultiplayerPeer::TRANSFER_MODE_UNRELIABLE_ORDERED;
-    opts["call_local"] = false;
-    opts["channel"] = 42;
-    rpc_config("rpc_example2", opts);
-    }
+	{
+	Dictionary opts;
+	opts["rpc_mode"] = MultiplayerAPI::RPC_MODE_AUTHORITY;
+	opts["transfer_mode"] = MultiplayerPeer::TRANSFER_MODE_RELIABLE;
+	opts["call_local"] = true;
+	opts["channel"] = 0;
+	rpc_config("rpc_example", opts);
+	}
+	{
+	Dictionary opts;
+	opts["rpc_mode"] = MultiplayerAPI::RPC_MODE_ANY_PEER;
+	opts["transfer_mode"] = MultiplayerPeer::TRANSFER_MODE_UNRELIABLE_ORDERED;
+	opts["call_local"] = false;
+	opts["channel"] = 42;
+	rpc_config("rpc_example2", opts);
+	}
 }
 
-GENERATE_GETTER(ExampleForRepo::get_float_auto, ExampleForRepo::float_auto);
-GENERATE_SETTER(ExampleForRepo::set_float_auto, ExampleForRepo::float_auto);
-GENERATE_GETTER(ExampleForRepo::get_float_hint, ExampleForRepo::float_hint);
-GENERATE_SETTER(ExampleForRepo::set_float_hint, ExampleForRepo::float_hint);
+GENERATE_GETTER(ExampleForRepo::get_float_auto, ExampleForRepo::float_auto, float);
+GENERATE_SETTER(ExampleForRepo::set_float_auto, ExampleForRepo::float_auto, float);
+GENERATE_GETTER(ExampleForRepo::get_float_hint, ExampleForRepo::float_hint, float);
+GENERATE_SETTER(ExampleForRepo::set_float_hint, ExampleForRepo::float_hint, float);
 
 VARIANT_ENUM_CAST(ExampleForRepo::Constants);
 VARIANT_BITFIELD_CAST(ExampleForRepo::Flags);
-
 ```
+- With no constexpr checks, native gdextension API (constexpr_checks builder argument)
+```cpp
+/*-- GENERATED FILE - DO NOT EDIT --*/
+
+#include <godot_cpp/classes/multiplayer_peer.hpp>
+#include <godot_cpp/classes/multiplayer_api.hpp>
+#include "../../src/example_gen.hpp"
 
 
+using namespace godot;
+
+// ExampleForRepo : Control
+
+void ExampleForRepo::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_custom_position", "pos"), &ExampleForRepo::set_custom_position);
+	ClassDB::bind_method(D_METHOD("get_custom_position"), &ExampleForRepo::get_custom_position);
+	ClassDB::bind_method(D_METHOD("simple_func"), &ExampleForRepo::simple_func);
+	ClassDB::bind_method(D_METHOD("simple_const_func"), &ExampleForRepo::simple_const_func);
+	ClassDB::bind_method(D_METHOD("image_ref_func", "p_image"), &ExampleForRepo::image_ref_func);
+	ClassDB::bind_method(D_METHOD("image_const_ref_func", "p_image"), &ExampleForRepo::image_const_ref_func);
+	ClassDB::bind_method(D_METHOD("return_something", "base"), &ExampleForRepo::return_something);
+	ClassDB::bind_method(D_METHOD("return_something_const"), &ExampleForRepo::return_something_const);
+	ClassDB::bind_method(D_METHOD("def_args", "p_a", "p_b"), &ExampleForRepo::def_args, DEFVAL(100), DEFVAL(200));
+	ClassDB::bind_method(D_METHOD("def_args_string", "s"), &ExampleForRepo::def_args_string, DEFVAL(String("default")));
+	ClassDB::bind_method(D_METHOD("rpc_example", "p_value"), &ExampleForRepo::rpc_example);
+	ClassDB::bind_method(D_METHOD("rpc_example2"), &ExampleForRepo::rpc_example2);
+	ClassDB::bind_method(D_METHOD("register_this"), &ExampleForRepo::register_this);
+	ClassDB::bind_method(D_METHOD("virtual_example"), &ExampleForRepo::virtual_example);
+	ClassDB::bind_method(D_METHOD("get_float_auto"), &ExampleForRepo::get_float_auto);
+	ClassDB::bind_method(D_METHOD("set_float_auto", "value"), &ExampleForRepo::set_float_auto);
+	ClassDB::bind_method(D_METHOD("get_float_hint"), &ExampleForRepo::get_float_hint);
+	ClassDB::bind_method(D_METHOD("set_float_hint", "value"), &ExampleForRepo::set_float_hint);
 
 
+	ClassDB::bind_static_method(get_class_static(), D_METHOD("test_static", "p_a", "p_b"),	&ExampleForRepo::test_static);
+
+
+	{
+		MethodInfo mi;
+
+		mi.arguments.push_back(PropertyInfo(GetTypeInfo<String>::VARIANT_TYPE, "named_arg"));
+		mi.arguments.push_back(PropertyInfo(GetTypeInfo<Variant>::VARIANT_TYPE, "unnamed_arg"));
+		
+		mi.name = "varargs_func_example";
+		ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "varargs_func_example", &ExampleForRepo::varargs_func_example, mi);
+	}
+
+
+	ADD_GROUP("Group", "group_");
+	ADD_SUBGROUP("Subgroup", "subgroup_");
+		ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype(custom_position)>::VARIANT_TYPE, "group_subgroup_custom_position"), "set_custom_position", "get_custom_position");
+		ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype(float_auto)>::VARIANT_TYPE, "group_subgroup_float_auto"), "set_float_auto", "get_float_auto");
+		ADD_PROPERTY(PropertyInfo(GetTypeInfo<decltype(float_hint)>::VARIANT_TYPE, "group_subgroup_float_hint", PROPERTY_HINT_RANGE, "0,1000,5"), "set_float_hint", "get_float_hint");
+
+
+	ADD_SIGNAL(MethodInfo("example_signal"
+		,PropertyInfo(GetTypeInfo<float>::VARIANT_TYPE, "typed_arg")
+		,PropertyInfo(GetTypeInfo<Variant>::VARIANT_TYPE, "untyped_arg")
+		));
+
+
+	BIND_ENUM_CONSTANT(FIRST);
+	BIND_ENUM_CONSTANT(ANSWER_TO_EVERYTHING);
+
+
+	BIND_BITFIELD_FLAG(FLAG_ONE);
+	BIND_BITFIELD_FLAG(FLAG_TWO);
+	BIND_BITFIELD_FLAG(FLAG_THREE);
+
+
+	BIND_CONSTANT(CONSTANT_WITHOUT_ENUM);
+}
+
+void ExampleForRepo::_rpc_config() {
+	{
+	Dictionary opts;
+	opts["rpc_mode"] = MultiplayerAPI::RPC_MODE_AUTHORITY;
+	opts["transfer_mode"] = MultiplayerPeer::TRANSFER_MODE_RELIABLE;
+	opts["call_local"] = true;
+	opts["channel"] = 0;
+	rpc_config("rpc_example", opts);
+	}
+	{
+	Dictionary opts;
+	opts["rpc_mode"] = MultiplayerAPI::RPC_MODE_ANY_PEER;
+	opts["transfer_mode"] = MultiplayerPeer::TRANSFER_MODE_UNRELIABLE_ORDERED;
+	opts["call_local"] = false;
+	opts["channel"] = 42;
+	rpc_config("rpc_example2", opts);
+	}
+}
+
+GENERATE_GETTER(ExampleForRepo::get_float_auto, ExampleForRepo::float_auto, float);
+GENERATE_SETTER(ExampleForRepo::set_float_auto, ExampleForRepo::float_auto, float);
+GENERATE_GETTER(ExampleForRepo::get_float_hint, ExampleForRepo::float_hint, float);
+GENERATE_SETTER(ExampleForRepo::set_float_hint, ExampleForRepo::float_hint, float);
+
+VARIANT_ENUM_CAST(ExampleForRepo::Constants);
+VARIANT_BITFIELD_CAST(ExampleForRepo::Flags);
+```
