@@ -23,19 +23,19 @@ using namespace godot;
 
 void initialize_@LIBRARY_NAME@_module(ModuleInitializationLevel p_level) {
 	switch (p_level) {
-		case MODULE_INITIALIZATION_LEVEL_CORE:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_CORE:
 			_register_level_core();
 			break;
-		case MODULE_INITIALIZATION_LEVEL_SERVERS:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_SERVERS:
 			_register_level_servers();
 			break;
-		case MODULE_INITIALIZATION_LEVEL_SCENE:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_SCENE:
 			// Non-cppscript classes, static/global variables
 			// initialization here
 
 			_register_level_scene();
 			break;
-		case MODULE_INITIALIZATION_LEVEL_EDITOR:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_EDITOR:
 			_register_level_editor();
 			break;
 		default:
@@ -45,19 +45,19 @@ void initialize_@LIBRARY_NAME@_module(ModuleInitializationLevel p_level) {
 
 void uninitialize_@LIBRARY_NAME@_module(ModuleInitializationLevel p_level) {
 	switch (p_level) {
-		case MODULE_INITIALIZATION_LEVEL_CORE:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_CORE:
 			_unregister_level_core();
 			break;
-		case MODULE_INITIALIZATION_LEVEL_SERVERS:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_SERVERS:
 			_unregister_level_servers();
 			break;
-		case MODULE_INITIALIZATION_LEVEL_SCENE:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_SCENE:
 			// Non-cppscript classes, static/global variables
 			// deinitialization here
 
 			_unregister_level_scene();
 			break;
-		case MODULE_INITIALIZATION_LEVEL_EDITOR:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_EDITOR:
 			_unregister_level_editor();
 			break;
 		default:
@@ -622,16 +622,16 @@ struct StaticAccess {{
 {0}
 void _cppscript_initialize_module(::godot::ModuleInitializationLevel p_level) {{
 	switch (p_level) {{
-		case MODULE_INITIALIZATION_LEVEL_CORE:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_CORE:
 			_register_level_core();
 			break;
-		case MODULE_INITIALIZATION_LEVEL_SERVERS:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_SERVERS:
 			_register_level_servers();
 			break;
-		case MODULE_INITIALIZATION_LEVEL_SCENE:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_SCENE:
 			_register_level_scene();
 			break;
-		case MODULE_INITIALIZATION_LEVEL_EDITOR:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_EDITOR:
 			_register_level_editor();
 			break;
 		default:
@@ -641,16 +641,16 @@ void _cppscript_initialize_module(::godot::ModuleInitializationLevel p_level) {{
 
 void _cppscript_uninitialize_module(::godot::ModuleInitializationLevel p_level) {{
 	switch (p_level) {{
-		case MODULE_INITIALIZATION_LEVEL_CORE:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_CORE:
 			_unregister_level_core();
 			break;
-		case MODULE_INITIALIZATION_LEVEL_SERVERS:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_SERVERS:
 			_unregister_level_servers();
 			break;
-		case MODULE_INITIALIZATION_LEVEL_SCENE:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_SCENE:
 			_unregister_level_scene();
 			break;
-		case MODULE_INITIALIZATION_LEVEL_EDITOR:
+		case ::godot::MODULE_INITIALIZATION_LEVEL_EDITOR:
 			_unregister_level_editor();
 			break;
 		default:
@@ -1421,7 +1421,7 @@ def write_header(file, defs, env):
 			header_include = '#include <godot_cpp/classes/multiplayer_api.hpp>\n' + header_include
 			header_include = '#include <godot_cpp/classes/multiplayer_peer.hpp>\n' + header_include
 
-		content = CODE_FORMAT.DONOTEDIT_MSG + header_include + '\n'.join(header_defs)
+		content = CODE_FORMAT.DONOTEDIT_MSG + header_include + '\nusing namespace godot;\n\n' + '\n'.join(header_defs)
 
 	os.makedirs(os.path.dirname(gen_filename), exist_ok=True)
 	with open(gen_filename, 'w') as fileopen:
